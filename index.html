@@ -1406,17 +1406,29 @@ function vsExportar() {
 let records = (window._recordsFromFirestore) ? window._recordsFromFirestore : JSON.parse(localStorage.getItem('viaticos_v4') || '[]');
 let seq = (window._seqFromFirestore) ? window._seqFromFirestore : (records.length ? Math.max(...records.map(r => r.id)) + 1 : 1);
 // Escuchar cuando el usuario se autentica para recargar datos de Firestore
-window.addEventListener('user-ready', function() {
+// Usamos una bandera para saber si el DOM ya está listo
+window._appDomReady = false;
+window._userReadyFired = false;
+
+function _aplicarDatosFirestore() {
+  if (!window._appDomReady || !window._userReadyFired) return; // esperar ambos
   if (window._recordsFromFirestore) {
     records = window._recordsFromFirestore;
     seq = window._seqFromFirestore || (records.length ? Math.max(...records.map(r => r.id)) + 1 : 1);
     localStorage.setItem('viaticos_v4', JSON.stringify(records));
-    if (typeof updateStats === 'function') updateStats();
-    if (typeof renderTable === 'function') renderTable();
-    if (typeof renderGroup === 'function') renderGroup();
-    if (typeof renderRecent === 'function') renderRecent();
   }
+  if (typeof updateStats === 'function') updateStats();
+  if (typeof renderTable === 'function') renderTable();
+  if (typeof renderGroup === 'function') renderGroup();
+  if (typeof renderRecent === 'function') renderRecent();
+}
+
+window.addEventListener('user-ready', function() {
+  window._userReadyFired = true;
+  _aplicarDatosFirestore();
 });
+
+
 let mapObj = null, routeLayers = [];
 let currentTrayHrs = null, currentTrayKm = null;
 let timers = { base: null, orig: null, dest: null, base2: null };
@@ -2512,6 +2524,9 @@ function exportarPorElemento() {
 
 // ─── INIT ─────────────────────────────────────────────────────────────
 updateStats(); renderTable(); renderGroup();
+// Marcar que la app ya está lista para recibir datos de Firestore
+window._appDomReady = true;
+_aplicarDatosFirestore();
 
 // ─── CARGA MASIVA ────────────────────────────────────────────────────
 function abrirCargaMasiva() {
