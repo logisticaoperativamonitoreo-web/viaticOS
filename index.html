@@ -408,6 +408,9 @@ tbody tr:hover td{background:rgba(124,58,237,.05)}
     <div class="tarifa-pill">🏙 Local · Sin viático</div>
     <div style="height:1px;background:var(--border);margin:10px 0"></div>
     <div id="topbar-user-email" style="font-size:10px;color:var(--hint);margin-bottom:6px;word-break:break-all;padding:0 2px"></div>
+    <div class="nav-item" style="color:var(--cyan);margin:0 0 4px 0" onclick="sincronizarAhora()">
+      <div class="nav-ico" style="background:rgba(34,211,238,.1)">☁️</div> Subir a la nube
+    </div>
     <div class="nav-item" style="color:var(--red);margin:0" onclick="cerrarSesion()">
       <div class="nav-ico" style="background:var(--red-bg)">🚪</div> Cerrar sesión
     </div>
@@ -3377,6 +3380,33 @@ function borrarSeleccionados() {
 </script>
 
 </div><!-- /app-root -->
+
+<script>
+// ─── SINCRONIZAR A LA NUBE ────────────────────────────────────────────
+async function sincronizarAhora() {
+  if (!window._fbCurrentUser) {
+    toast('⚠️ No hay sesión activa.'); return;
+  }
+  if (!records.length) {
+    toast('⚠️ No hay registros locales para subir.'); return;
+  }
+  toast('☁️ Subiendo ' + records.length + ' registros...', 3000);
+  try {
+    var uid = window._fbCurrentUser.uid;
+    var docRef = window._fbDoc(window._fbDb, 'usuarios', uid);
+    await window._fbSet(docRef, {
+      records: records,
+      seq: seq,
+      vs_periodos: vsPeriodos,
+      updatedAt: new Date().toISOString()
+    });
+    toast('✅ ' + records.length + ' registros subidos a la nube correctamente', 4000);
+  } catch(e) {
+    toast('❌ Error al subir: ' + e.message, 5000);
+    console.error(e);
+  }
+}
+</script>
 
 <script>
 // LOGIN
