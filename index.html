@@ -11,7 +11,7 @@
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-  import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const firebaseConfig = {
     apiKey: "AIzaSyB62iWx_GMsFhT50JBh8vC35urwQHsRjV4",
@@ -33,6 +33,34 @@
   window._fbAuth = auth;
   window._fbSignIn = signInAnonymously;
   window._fbReady = true;
+
+  // ── AUTH con email/password ──────────────────────────────
+  window._fbLoginEmail = async (email, password) => {
+    return signInWithEmailAndPassword(auth, email, password);
+  };
+  window._fbLogout = () => signOut(auth);
+
+  // Escuchar cambios de sesión
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // Si es sesión anónima, cerrarla y mostrar login
+      if (user.isAnonymous) {
+        await signOut(auth);
+        return;
+      }
+      // Usuario con email autenticado → mostrar app, ocultar login
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-root').style.display = 'flex';
+      // Mostrar email en topbar
+      const el = document.getElementById('topbar-user-email');
+      if (el) el.textContent = user.email;
+    } else {
+      // No autenticado → mostrar login, ocultar app
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app-root').style.display = 'none';
+    }
+  });
+
   // Disparar evento para que fbCargar sepa que Firebase está listo
   window.dispatchEvent(new Event('fb-ready'));
 </script>
@@ -201,13 +229,86 @@ tbody tr:hover td{background:rgba(124,58,237,.05)}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
 ::-webkit-scrollbar-thumb:hover{background:var(--p3)}
+
+/* LOGIN SCREEN */
+#login-screen{
+  position:fixed;inset:0;z-index:99999;
+  background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+.login-card{
+  background:var(--bg2);
+  border:1px solid var(--border2);
+  border-radius:var(--rxl);
+  padding:38px 32px;
+  width:100%;max-width:380px;
+  box-shadow:var(--shadow-lg);
+  position:relative;overflow:hidden;
+}
+.login-card::before{
+  content:'';display:block;height:3px;
+  position:absolute;top:0;left:0;right:0;
+  background:linear-gradient(90deg,var(--p1),var(--p3),#e879f9);
+}
+.login-logo{
+  font-family:'Syne',sans-serif;font-size:28px;font-weight:800;
+  background:linear-gradient(135deg,#c4b5fd,#e879f9);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  text-align:center;margin-bottom:4px;
+}
+.login-sub{
+  font-size:11px;color:var(--hint);text-transform:uppercase;
+  letter-spacing:.12em;text-align:center;margin-bottom:28px;
+}
+.login-field{margin-bottom:14px}
+.login-field label{display:block;font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.login-field input{width:100%;padding:10px 13px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;background:var(--surface2);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s}
+.login-field input:focus{border-color:var(--p3);box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+.login-field input::placeholder{color:var(--hint)}
+.login-btn{
+  width:100%;padding:11px;margin-top:8px;
+  border:none;border-radius:var(--r);
+  background:linear-gradient(135deg,var(--p1),var(--p3));
+  color:#fff;font-size:13px;font-weight:600;
+  font-family:'DM Sans',sans-serif;cursor:pointer;
+  transition:all .18s;box-shadow:0 4px 14px rgba(91,33,182,.35);
+}
+.login-btn:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 20px rgba(91,33,182,.5)}
+.login-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.login-err{
+  background:var(--red-bg);border:1px solid rgba(248,113,113,.2);
+  border-radius:var(--r);padding:9px 12px;
+  font-size:12px;color:var(--red);margin-top:12px;
+  display:none;text-align:center;
+}
+#app-root{display:none;width:100%}
 </style>
 </head>
 <body>
 
 <div class="toast" id="toast"></div>
 
-<!-- ═══ SIDEBAR ══════════════════════════════════════════ -->
+<!-- ═══ LOGIN SCREEN ══════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">ViaticOS</div>
+    <div class="login-sub">Sistema de Viáticos · Acceso privado</div>
+    <div class="login-field">
+      <label>Correo electrónico</label>
+      <input type="email" id="login-email" placeholder="usuario@correo.com" autocomplete="email"/>
+    </div>
+    <div class="login-field">
+      <label>Contraseña</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Iniciar sesión</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ═══ APP ROOT ══════════════════════════════════════════ -->
+<div id="app-root">
 <nav class="sidebar">
   <div class="sidebar-logo">
     <div class="brand">ViaticOS</div>
@@ -280,6 +381,11 @@ tbody tr:hover td{background:rgba(124,58,237,.05)}
     <div class="tarifa-pill">🌍 Nacional · $100 · +$50/hr · $200</div>
     <div class="tarifa-pill">🏔 Frontera · $150 · +$75/hr · $300</div>
     <div class="tarifa-pill">🏙 Local · Sin viático</div>
+    <div style="height:1px;background:var(--border);margin:10px 0"></div>
+    <div id="topbar-user-email" style="font-size:10px;color:var(--hint);margin-bottom:6px;word-break:break-all;padding:0 2px"></div>
+    <div class="nav-item" style="color:var(--red);margin:0" onclick="cerrarSesion()">
+      <div class="nav-ico" style="background:var(--red-bg)">🚪</div> Cerrar sesión
+    </div>
   </div>
 </nav>
 
@@ -3190,6 +3296,45 @@ function borrarSeleccionados() {
   save(); updateStats(); renderTable(); renderGroup();
   toast('🗑 ' + (antes - records.length) + ' registro(s) eliminados', 3000);
 }
+</script>
+
+</div><!-- /app-root -->
+
+<script>
+// LOGIN
+async function doLogin() {
+  var email    = document.getElementById('login-email').value.trim();
+  var password = document.getElementById('login-password').value;
+  var btn      = document.getElementById('login-btn');
+  var errEl    = document.getElementById('login-err');
+  if (!email || !password) { showLoginErr('Ingresa correo y contrasena.'); return; }
+  btn.disabled = true; btn.textContent = 'Iniciando sesion...'; errEl.style.display = 'none';
+  try {
+    await window._fbLoginEmail(email, password);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Iniciar sesion';
+    var msg = 'Correo o contrasena incorrectos.';
+    if (e.code === 'auth/user-not-found')    msg = 'Usuario no encontrado.';
+    if (e.code === 'auth/wrong-password')    msg = 'Contrasena incorrecta.';
+    if (e.code === 'auth/invalid-email')     msg = 'Correo no valido.';
+    if (e.code === 'auth/too-many-requests') msg = 'Demasiados intentos. Espera un momento.';
+    if (e.code === 'auth/invalid-credential') msg = 'Correo o contrasena incorrectos.';
+    showLoginErr(msg);
+  }
+}
+function showLoginErr(msg) {
+  var el = document.getElementById('login-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+function cerrarSesion() {
+  if (confirm('Cerrar sesion?')) window._fbLogout();
+}
+document.addEventListener('DOMContentLoaded', function() {
+  ['login-email','login-password'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+  });
+});
 </script>
 
 </body>
