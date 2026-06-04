@@ -1,0 +1,3196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ViaticOS — Gestión de Viáticos</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyB62iWx_GMsFhT50JBh8vC35urwQHsRjV4",
+    authDomain: "asignacioneslogistica-7861c.firebaseapp.com",
+    projectId: "asignacioneslogistica-7861c",
+    storageBucket: "asignacioneslogistica-7861c.firebasestorage.app",
+    messagingSenderId: "335187528500",
+    appId: "1:335187528500:web:6f6b70ccbfc8f47330b361"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+  const auth = getAuth(app);
+
+  // Exponer globalmente para que el JS no-modular pueda usarlo
+  window._fbDb   = db;
+  window._fbDoc  = doc;
+  window._fbGet  = getDoc;
+  window._fbAuth = auth;
+  window._fbSignIn = signInAnonymously;
+  window._fbReady = true;
+  // Disparar evento para que fbCargar sepa que Firebase está listo
+  window.dispatchEvent(new Event('fb-ready'));
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --p1:#5b21b6;--p2:#7c3aed;--p3:#8b5cf6;--p4:#a78bfa;--p5:#c4b5fd;
+  --bg:#0d0a1a;--bg2:#130e28;--bg3:#1a1238;
+  --surface:#17102e;--surface2:#1f1640;
+  --border:rgba(139,92,246,.15);--border2:rgba(139,92,246,.3);
+  --text:#edeaff;--muted:#9585c8;--hint:#5e5285;
+  --gold:#f59e0b;--gold-bg:rgba(245,158,11,.1);
+  --green:#10b981;--green-bg:rgba(16,185,129,.1);
+  --red:#f87171;--red-bg:rgba(248,113,113,.1);
+  --cyan:#22d3ee;
+  --r:10px;--rl:14px;--rxl:20px;
+  --nav-w:240px;
+  --shadow:0 8px 32px rgba(91,33,182,.2);
+  --shadow-lg:0 24px 64px rgba(0,0,0,.6);
+  --glow:0 0 20px rgba(124,58,237,.3);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.5;min-height:100vh;display:flex;overflow-x:hidden}
+
+/* SIDEBAR */
+.sidebar{width:var(--nav-w);min-height:100vh;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;left:0;top:0;z-index:200;overflow-y:auto;overflow-x:hidden}
+.sidebar-logo{padding:22px 18px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;background:linear-gradient(135deg,#c4b5fd,#e879f9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.3px}
+.brand-sub{font-size:10px;color:var(--hint);text-transform:uppercase;letter-spacing:.12em;margin-top:2px}
+.nav-section{padding:14px 14px 4px;font-size:9px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:.15em}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:var(--r);cursor:pointer;transition:all .18s;color:var(--muted);font-size:12.5px;font-weight:500;border:1px solid transparent;text-decoration:none}
+.nav-item:hover{background:rgba(124,58,237,.1);color:var(--text);border-color:var(--border)}
+.nav-item.active{background:linear-gradient(135deg,rgba(91,33,182,.35),rgba(124,58,237,.2));color:var(--p5);border-color:var(--border2);box-shadow:var(--glow)}
+.nav-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;background:rgba(124,58,237,.1);transition:all .18s}
+.nav-item.active .nav-ico{background:linear-gradient(135deg,var(--p1),var(--p3));box-shadow:0 4px 10px rgba(91,33,182,.4)}
+.nav-divider{height:1px;background:var(--border);margin:8px 14px}
+.nav-footer{padding:14px;margin-top:auto;border-top:1px solid var(--border)}
+.tarifa-pill{background:rgba(124,58,237,.08);border:1px solid var(--border);border-radius:6px;padding:5px 8px;margin-bottom:5px;font-size:10px;color:var(--muted);line-height:1.4}
+
+/* MAIN */
+.main-wrap{margin-left:var(--nav-w);flex:1;min-height:100vh;display:flex;flex-direction:column}
+.topbar{height:58px;background:rgba(13,10,26,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:100;flex-shrink:0}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-icon{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--p1),var(--p3));display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 4px 12px rgba(91,33,182,.3)}
+.topbar-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+/* PAGES */
+.page{display:none;padding:24px;width:100%;animation:fadeIn .25s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:20px;margin-bottom:14px;position:relative}
+.card-accent{border-top:2px solid var(--p3)}
+.card-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--p4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.stat-card:hover{border-color:var(--border2);box-shadow:var(--shadow)}
+.stat-blob{position:absolute;width:70px;height:70px;border-radius:50%;opacity:.12;top:-16px;right:-16px;filter:blur(18px)}
+.sc-lbl{font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.sc-val{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;line-height:1}
+.sc-sub{font-size:10px;color:var(--hint);margin-top:3px}
+
+/* FORM */
+.sep{font-size:10px;font-weight:700;color:var(--p4);text-transform:uppercase;letter-spacing:.1em;padding-bottom:7px;border-bottom:1px solid var(--border);margin:18px 0 12px;display:flex;align-items:center;gap:8px}
+.sep::before{content:'';width:3px;height:12px;border-radius:2px;background:linear-gradient(var(--p2),var(--p3));display:inline-block;flex-shrink:0}
+label{display:block;font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+input,select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;background:var(--surface2);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus{border-color:var(--p3);box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+input::placeholder{color:var(--hint)}
+select option{background:var(--bg2);color:var(--text)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:11px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:11px;margin-bottom:11px}
+@media(max-width:900px){.g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+/* BUTTONS */
+.btn{padding:8px 15px;border:1px solid var(--border2);border-radius:var(--r);background:transparent;color:var(--muted);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;white-space:nowrap;font-weight:500}
+.btn:hover{background:rgba(124,58,237,.12);color:var(--text);border-color:var(--p3)}
+.btn-primary{background:linear-gradient(135deg,var(--p1),var(--p3));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(91,33,182,.3)}
+.btn-primary:hover{filter:brightness(1.1);box-shadow:0 6px 18px rgba(91,33,182,.45);transform:translateY(-1px)}
+.btn-success{background:linear-gradient(135deg,#047857,var(--green));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(16,185,129,.2)}
+.btn-success:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-danger{background:linear-gradient(135deg,#dc2626,var(--red));color:#fff;border-color:transparent}
+.btn-danger:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-ghost{background:rgba(124,58,237,.1);color:var(--p5);border-color:var(--border2)}
+.btn-ghost:hover{background:rgba(124,58,237,.2);color:#fff}
+.btn-gold{background:linear-gradient(135deg,#b45309,var(--gold));color:#fff;border-color:transparent}
+.btn-cyan{background:linear-gradient(135deg,#0e7490,var(--cyan));color:#fff;border-color:transparent}
+.btn-sm{padding:5px 11px;font-size:11px}
+
+/* TABLE */
+.tbl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
+th{font-size:10px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.07em;text-align:left;padding:9px 11px;border-bottom:1px solid var(--border);background:rgba(124,58,237,.05);white-space:nowrap}
+td{padding:8px 11px;border-bottom:1px solid rgba(124,58,237,.07);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(124,58,237,.05)}
+.incomplete-row{background:rgba(245,158,11,.04)!important}
+.incomplete-row td:first-child::after{content:' ⚠';font-size:9px;color:var(--gold)}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700}
+.bf{background:rgba(167,139,250,.12);color:#c4b5fd;border:1px solid rgba(167,139,250,.25)}
+.bh{background:rgba(16,185,129,.1);color:#6ee7b7;border:1px solid rgba(16,185,129,.2)}
+.bo{background:rgba(148,163,184,.08);color:#94a3b8;border:1px solid rgba(148,163,184,.15)}
+.disp-badge{display:inline-flex;align-items:center;gap:5px;background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.25);border-radius:7px;padding:3px 10px;font-size:10px;font-weight:700}
+.zone-badge{display:inline-block;padding:1px 7px;border-radius:5px;font-size:10px;font-weight:600}
+.zone-nac{background:rgba(34,211,238,.1);color:var(--cyan)}
+.zone-fro{background:rgba(251,146,60,.1);color:#fb923c}
+.zone-loc{background:rgba(148,163,184,.08);color:#94a3b8}
+
+/* AUTOCOMPLETE / GPS */
+.sug{background:rgba(124,58,237,.12);color:var(--p5);border:1px solid var(--border2);border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600;margin-top:4px;display:none}
+.total-box{background:linear-gradient(135deg,rgba(91,33,182,.18),rgba(124,58,237,.1));border:1px solid var(--border2);border-radius:var(--r);padding:12px 16px}
+.total-box .lbl{font-size:10px;color:var(--hint);text-transform:uppercase;letter-spacing:.07em}
+.total-box .val{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--p5)}
+.form-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.msg{font-size:12px;font-weight:700;color:var(--green);display:none}
+.err{font-size:12px;font-weight:700;color:var(--red);display:none}
+#map{width:100%;height:220px;border-radius:var(--r);border:1px solid var(--border);margin-top:10px;display:none}
+.autocomplete-list{position:absolute;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);z-index:9000;width:100%;max-height:200px;overflow-y:auto;box-shadow:var(--shadow-lg);top:100%;left:0}
+.autocomplete-list div{padding:9px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);color:var(--muted)}
+.autocomplete-list div:last-child{border-bottom:none}
+.autocomplete-list div:hover{background:rgba(124,58,237,.15);color:var(--text)}
+.loc-wrap{position:relative}
+.coord-lbl{font-size:10px;color:var(--hint);margin-top:3px;min-height:12px}
+.tray-resumen{background:rgba(124,58,237,.06);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin:10px 0;display:none}
+.tray-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)}
+.tray-row:last-child{border-bottom:none}
+.tray-label{min-width:200px;color:var(--muted);font-size:11px}
+.tray-val{font-weight:700;min-width:70px}
+.tray-km{font-size:10px;color:var(--hint)}
+.seg-badge{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;margin-right:6px}
+.seg-base{background:rgba(167,139,250,.15);color:var(--p5)}
+.seg-serv{background:rgba(34,211,238,.1);color:var(--cyan)}
+.seg-ret{background:rgba(16,185,129,.1);color:var(--green)}
+.calc-btn-wrap{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.calc-status{font-size:12px;color:var(--muted);display:none}
+.grp-hdr{padding:9px 14px;font-size:10px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:.08em;background:rgba(124,58,237,.04);border-top:1px solid var(--border)}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--rxl);padding:26px;width:100%;max-width:780px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal::before{content:'';display:block;height:3px;margin:-26px -26px 20px;border-radius:var(--rxl) var(--rxl) 0 0;background:linear-gradient(90deg,var(--p1),var(--p3),#e879f9)}
+.modal h2{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.modal-close{background:var(--red-bg);border:1px solid rgba(248,113,113,.2);font-size:16px;line-height:1;cursor:pointer;color:var(--red);padding:5px 9px;border-radius:8px;transition:all .15s}
+.modal-close:hover{background:rgba(248,113,113,.25)}
+.import-info{background:var(--gold-bg);border:1px solid rgba(245,158,11,.25);border-radius:var(--r);padding:10px 12px;font-size:12px;color:var(--gold);margin-bottom:12px}
+.edit-btn{background:rgba(124,58,237,.12);border:1px solid var(--border2);cursor:pointer;font-size:12px;padding:5px 8px;border-radius:7px;color:var(--p5);transition:all .15s;line-height:1}
+.edit-btn:hover{background:var(--p3);color:#fff;border-color:var(--p3)}
+.del-btn{background:none;border:1px solid transparent;cursor:pointer;color:var(--hint);padding:5px 8px;border-radius:7px;font-size:12px;line-height:1;transition:all .15s}
+.del-btn:hover{color:var(--red);background:var(--red-bg);border-color:rgba(248,113,113,.2)}
+
+/* TOAST */
+.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:11px 18px;border-radius:var(--r);font-size:12.5px;font-weight:500;z-index:99999;opacity:0;transform:translateY(8px);transition:opacity .22s,transform .22s;pointer-events:none;max-width:360px;box-shadow:var(--shadow)}
+.toast.show{opacity:1;transform:translateY(0)}
+
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:var(--p3)}
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- ═══ SIDEBAR ══════════════════════════════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">ViaticOS</div>
+    <div class="brand-sub">Sistema de Viáticos · v3</div>
+  </div>
+
+  <div class="nav-section">Principal</div>
+  <div class="nav-item active" onclick="navTo('pg-dashboard','📊','Dashboard','Resumen general')">
+    <div class="nav-ico">📊</div> Dashboard
+  </div>
+  <div class="nav-item" onclick="navTo('pg-nuevo','➕','Nuevo registro','Capturar servicio')">
+    <div class="nav-ico">➕</div> Nuevo registro
+  </div>
+  <div class="nav-item" onclick="navTo('pg-tabla','📋','Registros','Todos los servicios capturados')">
+    <div class="nav-ico">📋</div> Registros
+  </div>
+
+  <div class="nav-divider"></div>
+  <div class="nav-section">Importar</div>
+  <div class="nav-item" onclick="document.getElementById('import-input').click()">
+    <div class="nav-ico">⬆️</div> Importar machote
+  </div>
+  <div class="nav-item" onclick="document.getElementById('import-asig-input').click()">
+    <div class="nav-ico">📋</div> ASIG / Bridgestone
+  </div>
+  <div class="nav-item" onclick="abrirCargaMasiva()">
+    <div class="nav-ico">⚡</div> Carga masiva
+  </div>
+  <div class="nav-item" onclick="navTo('pg-firebase','🔥','Importar de OpsControl','Conexión directa a Firebase')">
+    <div class="nav-ico">🔥</div> Importar OpsControl
+  </div>
+  <div class="nav-item" onclick="navTo('pg-historial','🕓','Historial','Archivos importados')">
+    <div class="nav-ico">🕓</div> Historial
+  </div>
+
+  <div class="nav-divider"></div>
+  <div class="nav-section">Respaldo</div>
+  <div class="nav-item" onclick="exportarRespaldo()">
+    <div class="nav-ico">💾</div> Guardar respaldo
+  </div>
+  <div class="nav-item" onclick="document.getElementById('import-respaldo-input').click()">
+    <div class="nav-ico">♻️</div> Restaurar respaldo
+  </div>
+  <input type="file" id="import-respaldo-input" accept=".json" style="display:none" onchange="importarRespaldo(this)">
+
+  <div class="nav-divider"></div>
+  <div class="nav-section">Exportar</div>
+  <div class="nav-item" onclick="exportarDispersion()">
+    <div class="nav-ico">📤</div> Dispersión
+  </div>
+  <div class="nav-item" onclick="exportarPorElemento()">
+    <div class="nav-ico">👤</div> Por elemento
+  </div>
+  <div class="nav-item" onclick="exportarRecargas()">
+    <div class="nav-ico">📱</div> Recargas
+  </div>
+  <div class="nav-item" onclick="abrirViaticosSemanales()">
+    <div class="nav-ico">📅</div> Viáticos semanales
+  </div>
+  <div class="nav-item" onclick="exportarCompleto()">
+    <div class="nav-ico">⬇️</div> Exportar completo
+  </div>
+
+  <div class="nav-divider"></div>
+  <div class="nav-item" style="color:var(--red)" onclick="limpiarTodo()">
+    <div class="nav-ico" style="background:var(--red-bg)">🗑️</div> Borrar todo
+  </div>
+
+  <div class="nav-footer">
+    <div class="tarifa-pill">🌍 Nacional · $100 · +$50/hr · $200</div>
+    <div class="tarifa-pill">🏔 Frontera · $150 · +$75/hr · $300</div>
+    <div class="tarifa-pill">🏙 Local · Sin viático</div>
+  </div>
+</nav>
+
+<!-- Inputs de importación ocultos -->
+<input type="file" id="import-input" accept=".xlsx,.xls" style="display:none" onchange="importarExcel(this)">
+<input type="file" id="import-asig-input" accept=".xlsx,.xls" style="display:none" onchange="importarAsig(this)">
+
+<!-- ═══ MAIN ══════════════════════════════════════════════ -->
+<div class="main-wrap">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-icon" id="topbar-icon">📊</div>
+      <div>
+        <div class="topbar-title" id="topbar-title">Dashboard</div>
+        <div class="topbar-sub" id="topbar-sub">Resumen general</div>
+      </div>
+    </div>
+    <div id="topbar-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+  </div>
+
+  <!-- ═══ PAGE: DASHBOARD ═══════════════════════════════ -->
+  <div class="page active" id="pg-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-blob" style="background:var(--p3)"></div>
+        <div class="sc-lbl">Servicios</div>
+        <div class="sc-val" id="st-cnt" style="color:var(--p5)">0</div>
+        <div class="sc-sub">registros</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-blob" style="background:var(--green)"></div>
+        <div class="sc-lbl">Total viáticos</div>
+        <div class="sc-val" id="st-tot" style="color:#6ee7b7">$0</div>
+        <div class="sc-sub">acumulado</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-blob" style="background:var(--gold)"></div>
+        <div class="sc-lbl">Promedio</div>
+        <div class="sc-val" id="st-avg" style="color:#fcd34d">$0</div>
+        <div class="sc-sub">por servicio</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-blob" style="background:var(--cyan)"></div>
+        <div class="sc-lbl">Hrs promedio</div>
+        <div class="sc-val" id="st-hrs" style="color:#67e8f9">—</div>
+        <div class="sc-sub">por servicio</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-blob" style="background:var(--p4)"></div>
+        <div class="sc-lbl">Km promedio</div>
+        <div class="sc-val" id="st-km" style="color:var(--p5)">—</div>
+        <div class="sc-sub">trayecto</div>
+      </div>
+    </div>
+
+    <!-- Accesos rápidos -->
+    <div class="card card-accent">
+      <div class="card-title">Accesos rápidos</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">
+        <button class="btn btn-primary" style="padding:13px 14px;text-align:left;display:flex;align-items:center;gap:10px;font-size:12px" onclick="navTo('pg-nuevo','➕','Nuevo registro','Capturar servicio')">
+          <span style="font-size:20px">➕</span><div><div style="font-weight:700;margin-bottom:2px">Nuevo registro</div><div style="opacity:.7;font-size:10px">Capturar servicio</div></div>
+        </button>
+        <button class="btn btn-success" style="padding:13px 14px;text-align:left;display:flex;align-items:center;gap:10px;font-size:12px" onclick="exportarDispersion()">
+          <span style="font-size:20px">📤</span><div><div style="font-weight:700;margin-bottom:2px">Exportar dispersión</div><div style="opacity:.7;font-size:10px">Para nómina</div></div>
+        </button>
+        <button class="btn btn-ghost" style="padding:13px 14px;text-align:left;display:flex;align-items:center;gap:10px;font-size:12px" onclick="document.getElementById('import-asig-input').click()">
+          <span style="font-size:20px">📋</span><div><div style="font-weight:700;margin-bottom:2px">Importar ASIG</div><div style="opacity:.7;font-size:10px">Carga automática</div></div>
+        </button>
+        <button class="btn btn-gold" style="padding:13px 14px;text-align:left;display:flex;align-items:center;gap:10px;font-size:12px" onclick="abrirViaticosSemanales()">
+          <span style="font-size:20px">📅</span><div><div style="font-weight:700;margin-bottom:2px">Viáticos semanales</div><div style="opacity:.7;font-size:10px">Por período</div></div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Últimos registros -->
+    <div class="card">
+      <div class="card-title">Últimos 5 registros</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Consecutivo</th><th>Servicio</th><th>Ruta</th><th>Custodios</th><th style="text-align:right">Monto</th>
+          </tr></thead>
+          <tbody id="tbody-recent">
+            <tr><td colspan="5" style="text-align:center;color:var(--hint);padding:20px;font-style:italic">Sin registros aún</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="text-align:right;margin-top:10px">
+        <button class="btn btn-ghost btn-sm" onclick="navTo('pg-tabla','📋','Registros','Todos los servicios')">Ver todos →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: NUEVO REGISTRO ══════════════════════════ -->
+  <div class="page" id="pg-nuevo">
+    <div class="card card-accent">
+      <div class="sep" style="margin-top:0">Datos del servicio</div>
+      <div class="g3">
+        <div><label>Consecutivo</label><input id="cons" type="text" placeholder="ej. CV-001"></div>
+        <div>
+          <label>Tipo de servicio</label>
+          <select id="servicio">
+            <option value="">Seleccionar...</option>
+            <option>BRIDGESTONE FORANEO</option><option>BRIDGESTONE IN HOUSE</option>
+            <option>FAURECIA</option><option>PAC INTERNATIONAL</option><option>PILSAC</option>
+            <option>ALSERA-SELOASA</option><option>CARVAJAL EDUC.</option><option>OXXO</option>
+            <option>JAMES FARREL</option><option>DISEÑOS LABOR</option><option>SELDER</option>
+            <option>PRYSMIAN</option><option>BISSU</option><option>Otro</option>
+          </select>
+        </div>
+        <div>
+          <label>Zona</label>
+          <select id="zona" onchange="calcHoras()">
+            <option value="">Seleccionar zona...</option>
+            <option value="nacional">Zona nacional</option>
+            <option value="fronteriza">Zona fronteriza norte / Manzanillo</option>
+            <option value="local">Local (CDMX / EDOMEX)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sep">Ubicaciones GPS</div>
+      <div class="g4">
+        <div>
+          <label>🏠 Base salida</label>
+          <div class="loc-wrap">
+            <input id="base-input" type="text" placeholder="Busca la base de salida..." autocomplete="off" oninput="buscar('base')">
+            <div class="autocomplete-list" id="base-list" style="display:none"></div>
+          </div>
+          <div class="coord-lbl" id="base-coord"></div>
+          <input type="hidden" id="base-lat"><input type="hidden" id="base-lng"><input type="hidden" id="base-name">
+        </div>
+        <div>
+          <label>📍 Origen del servicio</label>
+          <div class="loc-wrap">
+            <input id="orig-input" type="text" placeholder="Ciudad o dirección origen..." autocomplete="off" oninput="buscar('orig')">
+            <div class="autocomplete-list" id="orig-list" style="display:none"></div>
+          </div>
+          <div class="coord-lbl" id="orig-coord"></div>
+          <input type="hidden" id="orig-lat"><input type="hidden" id="orig-lng"><input type="hidden" id="orig-name">
+        </div>
+        <div>
+          <label>🏁 Destino del servicio</label>
+          <div class="loc-wrap">
+            <input id="dest-input" type="text" placeholder="Ciudad o dirección destino..." autocomplete="off" oninput="buscar('dest')">
+            <div class="autocomplete-list" id="dest-list" style="display:none"></div>
+          </div>
+          <div class="coord-lbl" id="dest-coord"></div>
+          <input type="hidden" id="dest-lat"><input type="hidden" id="dest-lng"><input type="hidden" id="dest-name">
+        </div>
+        <div>
+          <label>🏠 Base llegada</label>
+          <div class="loc-wrap">
+            <input id="base2-input" type="text" placeholder="Busca la base de llegada..." autocomplete="off" oninput="buscar('base2')">
+            <div class="autocomplete-list" id="base2-list" style="display:none"></div>
+          </div>
+          <div class="coord-lbl" id="base2-coord"></div>
+          <input type="hidden" id="base2-lat"><input type="hidden" id="base2-lng"><input type="hidden" id="base2-name">
+        </div>
+      </div>
+      <div class="calc-btn-wrap">
+        <button class="btn btn-primary" onclick="calcularRuta()">🗺 Calcular trayecto con GPS</button>
+        <span class="calc-status" id="calc-status"></span>
+      </div>
+      <div id="map"></div>
+      <div class="tray-resumen" id="tray-resumen">
+        <div class="tray-row"><span class="seg-badge seg-base">T1</span><span class="tray-label" id="tr-label1">Base salida → Origen</span><span class="tray-val" id="tr-h1">—</span><span class="tray-km" id="tr-km1"></span></div>
+        <div class="tray-row"><span class="seg-badge seg-serv">T2</span><span class="tray-label" id="tr-label2">Origen → Destino</span><span class="tray-val" id="tr-h2" style="color:var(--cyan)">⏱ Según horario</span><span class="tray-km" id="tr-km2" style="font-style:italic">(tiempo real)</span></div>
+        <div class="tray-row"><span class="seg-badge seg-ret">T3</span><span class="tray-label" id="tr-label3">Destino → Base llegada</span><span class="tray-val" id="tr-h3">—</span><span class="tray-km" id="tr-km3"></span></div>
+        <div class="tray-row">
+          <span style="min-width:200px;font-size:12px">⏱ Total T1+T3 (GPS)</span>
+          <span class="tray-val" id="tr-htot" style="color:var(--p5)">—</span>
+          <span class="tray-km" id="tr-kmtot"></span>
+          <button class="btn btn-sm btn-ghost" style="margin-left:10px" onclick="usarTiempo()">← Usar este tiempo</button>
+        </div>
+      </div>
+
+      <div class="sep">Horarios del servicio</div>
+      <div class="g4">
+        <div><label>Fecha inicio</label><input id="fi" type="date" oninput="calcHoras()"></div>
+        <div><label>Hora inicio</label><input id="hi" type="time" oninput="calcHoras()"></div>
+        <div><label>Fecha fin</label><input id="ff" type="date" oninput="calcHoras()"></div>
+        <div><label>Hora fin</label><input id="hf" type="time" oninput="calcHoras()"></div>
+      </div>
+      <div class="g2">
+        <div>
+          <label>Horas de trayecto (T1+T3)</label>
+          <input id="htray" type="number" placeholder="Del botón GPS ← o captura manual" step="0.25" oninput="calcHoras()">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <div style="width:100%;background:rgba(124,58,237,.07);border:1px solid var(--border);border-radius:var(--r);padding:10px 13px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;font-size:12px">
+              <span style="color:var(--p5);font-size:10px;font-weight:700;text-transform:uppercase">Trayecto:</span><strong id="h-tray">—</strong>
+              <span style="color:var(--hint)">+</span>
+              <span style="color:var(--cyan);font-size:10px;font-weight:700;text-transform:uppercase">Servicio:</span><strong id="h-serv">—</strong>
+            </div>
+            <div style="font-family:Syne,sans-serif;font-size:16px;font-weight:700">Total: <span id="h-tot" style="color:var(--p5)">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sep">Custodios y viáticos</div>
+      <div class="g4">
+        <div><label>Custodio 1</label><input id="c1" type="text" placeholder="APELLIDO NOMBRE" oninput="this.value=this.value.toUpperCase()"></div>
+        <div><label>N° Empleado 1</label><input id="e1" type="text" placeholder="ej. 1046"></div>
+        <div><label>Custodio 2 (opcional)</label><input id="c2" type="text" placeholder="APELLIDO NOMBRE" oninput="this.value=this.value.toUpperCase();toggleRecarga2()"></div>
+        <div><label>N° Empleado 2</label><input id="e2" type="text" placeholder="ej. 953"></div>
+      </div>
+      <div class="g2">
+        <div>
+          <label>Viático custodio 1 ($)</label>
+          <input id="v1" type="number" placeholder="Se sugiere según zona + horas" oninput="calcTotal()">
+          <div id="sug1" class="sug"></div>
+        </div>
+        <div>
+          <label>Viático custodio 2 ($)</label>
+          <input id="v2" type="number" placeholder="Se sugiere según zona + horas" oninput="calcTotal()">
+          <div id="sug2" class="sug"></div>
+        </div>
+      </div>
+      <div style="margin-bottom:12px;display:flex;gap:20px;flex-wrap:wrap">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text);text-transform:none;letter-spacing:0">
+          <input type="checkbox" id="recarga1" onchange="calcTotal()" style="width:15px;height:15px;accent-color:var(--p3)">
+          📱 Recarga custodio 1 <span style="color:var(--p5);font-weight:700">+$50</span>
+        </label>
+        <label id="recarga2-label" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text);text-transform:none;letter-spacing:0;opacity:.4">
+          <input type="checkbox" id="recarga2" onchange="calcTotal()" style="width:15px;height:15px;accent-color:var(--p3)" disabled>
+          📱 Recarga custodio 2 <span style="color:var(--p5);font-weight:700">+$50</span>
+        </label>
+      </div>
+      <div class="form-footer">
+        <div class="total-box">
+          <div class="lbl">Total del servicio</div>
+          <div class="val" id="preview">$0</div>
+        </div>
+        <button class="btn btn-primary" style="padding:10px 24px;font-size:14px" onclick="agregar()">+ Agregar registro</button>
+        <span class="msg" id="msg">✓ Registro guardado</span>
+        <span class="err" id="err">Completa: consecutivo, servicio, base, origen, destino y custodio 1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: REGISTROS ════════════════════════════════ -->
+  <div class="page" id="pg-tabla">
+    <div class="card">
+      <div class="tbl-header">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-family:Syne,sans-serif;font-weight:700;font-size:14px">Registros capturados</span>
+          <span id="disp-badge" class="disp-badge" style="display:none">✓ <span id="disp-count">0</span> listos</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="borrarSeleccionados()" id="btn-borrar-sel" style="display:none;background:var(--gold-bg);color:var(--gold);border-color:rgba(245,158,11,.3)">🗑 Borrar seleccionados (<span id="sel-count">0</span>)</button>
+          <button class="btn btn-sm" onclick="abrirBorrarDatos()" style="background:var(--red-bg);color:var(--red);border-color:rgba(248,113,113,.25)">🗑 Borrar datos</button>
+          <select id="buscar-campo" onchange="renderTable()" style="font-size:11px;padding:6px 9px;width:auto">
+            <option value="todo">Todo</option>
+            <option value="elemento">Por elemento</option>
+            <option value="consecutivo">Por consecutivo</option>
+            <option value="servicio">Por servicio</option>
+            <option value="ruta">Por origen/destino</option>
+            <option value="zona">Por zona</option>
+          </select>
+          <input type="text" id="buscar" placeholder="Buscar..." oninput="renderTable()" style="width:155px;font-size:12px">
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:80px">Consec.</th>
+            <th style="width:120px">Servicio</th>
+            <th style="width:75px">Base sal.</th>
+            <th style="width:75px">Base lleg.</th>
+            <th style="width:160px">Ruta</th>
+            <th style="width:100px">Horario</th>
+            <th style="width:80px">Zona</th>
+            <th style="width:58px;text-align:center">Hrs</th>
+            <th style="width:55px;text-align:center">Km</th>
+            <th>Custodios</th>
+            <th style="width:65px;text-align:center">N° Emp</th>
+            <th style="width:55px;text-align:center">Recarga</th>
+            <th style="width:70px;text-align:right">Monto</th>
+            <th style="width:65px;text-align:center">Acc.</th>
+          </tr></thead>
+          <tbody id="tbody">
+            <tr><td colspan="14" style="text-align:center;color:var(--hint);padding:28px;font-style:italic">Sin registros aún</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="agrupado" style="display:none;margin-top:16px">
+        <div class="grp-hdr">Totales agrupados por consecutivo</div>
+        <div class="tbl-wrap" style="margin-top:0;border-top:none;border-radius:0 0 var(--r) var(--r)">
+          <table>
+            <thead><tr>
+              <th style="width:80px">Consec.</th>
+              <th style="width:120px">Servicio</th>
+              <th style="width:160px">Ruta</th>
+              <th style="width:60px;text-align:center">Hrs</th>
+              <th style="width:55px;text-align:center">Km</th>
+              <th>Custodios</th>
+              <th style="width:72px;text-align:right">Total</th>
+            </tr></thead>
+            <tbody id="tbody-group"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: HISTORIAL ═══════════════════════════════ -->
+  <div class="page" id="pg-historial">
+    <div class="card card-accent">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div class="card-title" style="margin-bottom:0">🕓 Historial de importaciones</div>
+        <button class="btn btn-danger btn-sm" onclick="limpiarHistorial()">Limpiar historial</button>
+      </div>
+      <div id="historial-lista">
+        <div style="text-align:center;color:var(--hint);padding:32px;font-style:italic">Sin importaciones registradas aún</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: FIREBASE ════════════════════════════════ -->
+  <div class="page" id="pg-firebase">
+    <div class="card card-accent">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#f97316,#ef4444);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px rgba(239,68,68,.3)">🔥</div>
+        <div>
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:16px">Importar desde OpsControl</div>
+          <div style="font-size:12px;color:var(--muted)">Conexión directa a Firebase · asignacioneslogistica</div>
+        </div>
+        <div id="fb-status-dot" style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--hint)">
+          <div id="fb-dot" style="width:8px;height:8px;border-radius:50%;background:var(--hint)"></div>
+          <span id="fb-status-txt">Conectando...</span>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="sep" style="margin-top:0">Filtrar datos</div>
+      <div class="g3" style="margin-bottom:12px">
+        <div>
+          <label>Fecha inicio</label>
+          <input id="fb-fecha-ini" type="date">
+        </div>
+        <div>
+          <label>Fecha fin</label>
+          <input id="fb-fecha-fin" type="date">
+        </div>
+        <div>
+          <label>Tipo de datos</label>
+          <select id="fb-tipo">
+            <option value="ambos">Asignaciones + Bridgestone</option>
+            <option value="servicios">Solo asignaciones diarias</option>
+            <option value="bsServicios">Solo Bridgestone</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="fbCargar()">🔍 Consultar Firebase</button>
+        <button class="btn btn-sm" onclick="fbFechaHoy()">Hoy</button>
+        <button class="btn btn-sm" onclick="fbFechaSemana()">Esta semana</button>
+        <button class="btn btn-sm" onclick="fbFechaMes()">Este mes</button>
+      </div>
+
+      <!-- Estado / loading -->
+      <div id="fb-loading" style="display:none;text-align:center;padding:24px;color:var(--muted)">
+        <div style="font-size:28px;margin-bottom:8px;animation:spin 1s linear infinite;display:inline-block">🔄</div>
+        <div style="font-size:13px">Consultando Firebase...</div>
+      </div>
+
+      <!-- Resultados -->
+      <div id="fb-resultados" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">
+            Resultados: <span id="fb-total-txt" style="color:var(--p5)">0</span> registros encontrados
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;text-transform:none;letter-spacing:0;color:var(--text)">
+              <input type="checkbox" id="fb-sel-todo" onchange="fbSelTodo(this.checked)" style="accent-color:var(--p3);width:14px;height:14px">
+              Seleccionar todos
+            </label>
+            <button class="btn btn-success" onclick="fbImportar()">✅ Importar seleccionados (<span id="fb-sel-count">0</span>)</button>
+          </div>
+        </div>
+
+        <!-- Tabs servicios / bridgestone -->
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <button id="fb-tab-serv" class="btn btn-sm btn-ghost" onclick="fbTab('servicios')" style="font-size:11px">📋 Asignaciones (<span id="fb-cnt-serv">0</span>)</button>
+          <button id="fb-tab-bs" class="btn btn-sm" onclick="fbTab('bsServicios')" style="font-size:11px;border-color:var(--border2);color:var(--muted)">🟣 Bridgestone (<span id="fb-cnt-bs">0</span>)</button>
+        </div>
+
+        <div class="tbl-wrap">
+          <table style="min-width:600px">
+            <thead><tr>
+              <th style="width:36px"><input type="checkbox" id="fb-chk-hdr" onchange="fbSelTodo(this.checked)" style="accent-color:var(--p3);width:13px;height:13px"></th>
+              <th>Consecutivo</th>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Elemento / Custodio</th>
+              <th>Origen</th>
+              <th>Destino</th>
+              <th>Estatus</th>
+            </tr></thead>
+            <tbody id="fb-tbody">
+              <tr><td colspan="8" class="empty">Realiza una consulta para ver los datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="fb-empty" style="display:none;text-align:center;padding:32px;color:var(--hint)">
+        <div style="font-size:40px;margin-bottom:10px">📭</div>
+        <div style="font-size:13px">Sin resultados para ese rango de fechas</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main-wrap -->
+
+<!-- Modal de edición -->
+<input type="hidden" id="m-base-lat"><input type="hidden" id="m-base-lng">
+<input type="hidden" id="m-base2-lat"><input type="hidden" id="m-base2-lng">
+<input type="hidden" id="m-origen-lat"><input type="hidden" id="m-origen-lng">
+<input type="hidden" id="m-destino-lat"><input type="hidden" id="m-destino-lng">
+
+<div class="modal-overlay" id="modal-overlay" style="display:none" onclick="if(event.target===this)cerrarModal()">
+  <div class="modal">
+    <h2>
+      <span>✏️ Editar registro <span id="modal-cons-title" style="color:var(--accent)"></span></span>
+      <button class="modal-close" onclick="cerrarModal()">✕</button>
+    </h2>
+    <div class="import-info" id="modal-incomplete-msg" style="display:none">
+      ⚠️ Este registro fue importado y tiene campos pendientes de completar.
+    </div>
+    <div class="g3" style="margin-bottom:12px">
+      <div><label>Consecutivo</label><input id="m-cons" type="text"></div>
+      <div><label>Tipo de servicio</label>
+        <select id="m-servicio">
+          <option value="">Seleccionar...</option>
+          <option>BRIDGESTONE FORANEO</option><option>BRIDGESTONE IN HOUSE</option>
+          <option>FAURECIA</option><option>PAC INTERNATIONAL</option><option>PILSAC</option>
+          <option>ALSERA-SELOASA</option><option>CARVAJAL EDUC.</option><option>OXXO</option>
+          <option>JAMES FARREL</option><option>DISEÑOS LABOR</option><option>SELDER</option>
+          <option>PRYSMIAN</option><option>BISSU</option><option>Otro</option>
+        </select>
+      </div>
+      <div><label>Zona</label>
+        <select id="m-zona" onchange="recalcModalTotal()">
+          <option value="">Seleccionar zona...</option>
+          <option value="nacional">Zona nacional</option>
+          <option value="fronteriza">Zona fronteriza norte / Manzanillo</option>
+          <option value="local">Local (CDMX / EDOMEX)</option>
+        </select>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div><label>Base salida</label>
+        <div style="position:relative">
+          <input id="m-base" type="text" placeholder="Buscar dirección base salida..." autocomplete="off" oninput="buscarModal('m-base')">
+          <div class="autocomplete-list" id="m-base-list" style="display:none;z-index:10000"></div>
+        </div>
+      </div>
+      <div><label>Base llegada</label>
+        <div style="position:relative">
+          <input id="m-base2" type="text" placeholder="Buscar dirección base llegada..." autocomplete="off" oninput="buscarModal('m-base2')">
+          <div class="autocomplete-list" id="m-base2-list" style="display:none;z-index:10000"></div>
+        </div>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div><label>Origen 📍</label>
+        <div style="position:relative">
+          <input id="m-origen" type="text" placeholder="Buscar ciudad o dirección de origen..." autocomplete="off" oninput="buscarModal('m-origen')">
+          <div class="autocomplete-list" id="m-origen-list" style="display:none;z-index:10000"></div>
+        </div>
+      </div>
+      <div><label>Destino 📍</label>
+        <div style="position:relative">
+          <input id="m-destino" type="text" placeholder="Buscar ciudad o dirección de destino..." autocomplete="off" oninput="buscarModal('m-destino')">
+          <div class="autocomplete-list" id="m-destino-list" style="display:none;z-index:10000"></div>
+        </div>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div><label>Fecha/hora inicio</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <input id="m-fi" type="date" onchange="recalcModalTotal()">
+          <input id="m-hi" type="time" onchange="recalcModalTotal()">
+        </div>
+      </div>
+      <div><label>Fecha/hora fin</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <input id="m-ff" type="date" onchange="recalcModalTotal()">
+          <input id="m-hf" type="time" onchange="recalcModalTotal()">
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">⏱ Trayecto Base→Origen + Destino→Base</span>
+        <button class="btn btn-primary" onclick="calcularRutaModal()" id="m-calc-btn" style="font-size:12px;padding:5px 12px">🗺 Calcular con GPS</button>
+      </div>
+      <div id="m-tray-rows" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:4px 12px;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--muted)" id="m-tr-label1">Base salida → Origen</span>
+          <span style="font-weight:700;color:var(--purple)" id="m-tr-h1">—</span>
+          <span style="color:var(--hint)" id="m-tr-km1"></span>
+          <span style="color:var(--muted)" id="m-tr-label3">Destino → Base llegada</span>
+          <span style="font-weight:700;color:var(--success)" id="m-tr-h3">—</span>
+          <span style="color:var(--hint)" id="m-tr-km3"></span>
+          <span style="font-weight:700;border-top:1px solid var(--border);padding-top:4px">Total trayecto</span>
+          <span style="font-weight:800;color:var(--accent);border-top:1px solid var(--border);padding-top:4px" id="m-tr-htot">—</span>
+          <span style="color:var(--hint);border-top:1px solid var(--border);padding-top:4px" id="m-tr-kmtot"></span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted)">O captura manual:</span>
+        <input id="m-htray" type="number" step="0.25" min="0" placeholder="hrs trayecto" oninput="recalcModalTotal()" style="width:130px;font-size:12px">
+        <span id="m-calc-status" style="display:none;font-size:11px;color:var(--accent)"></span>
+      </div>
+    </div>
+    <div class="g4" style="margin-bottom:12px">
+      <div><label>Custodio 1</label><input id="m-c1" type="text" oninput="this.value=this.value.toUpperCase()"></div>
+      <div><label>N° empleado 1</label><input id="m-e1" type="text"></div>
+      <div><label>Custodio 2 (opcional)</label><input id="m-c2" type="text" oninput="this.value=this.value.toUpperCase()"></div>
+      <div><label>N° empleado 2</label><input id="m-e2" type="text"></div>
+    </div>
+    <div id="m-sug-panel" style="display:none;background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Viático sugerido según zona y horas</div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span id="m-sug-monto" style="font-size:26px;font-weight:800;color:var(--accent)">$0</span>
+            <span id="m-sug-detalle" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="aplicarSugerido()" style="white-space:nowrap">✓ Aplicar a viático 1</button>
+      </div>
+    </div>
+    <div id="m-sug-missing" style="display:none;background:var(--warn-bg);border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">
+      ⚠️ Ingresa <strong>fecha/hora inicio y fin</strong> + <strong>zona</strong> para calcular el viático sugerido.
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div><label>Viático custodio 1 ($)</label><input id="m-v1" type="number" oninput="recalcModalTotal()"></div>
+      <div><label>Viático custodio 2 ($)</label><input id="m-v2" type="number" oninput="recalcModalTotal()"></div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="m-recarga1" onchange="recalcModalTotal()" style="width:16px;height:16px;accent-color:var(--accent)">
+        📱 Recarga custodio 1 (+$50)
+      </label>
+      &nbsp;&nbsp;
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="m-recarga2" onchange="recalcModalTotal()" style="width:16px;height:16px;accent-color:var(--accent)">
+        📱 Recarga custodio 2 (+$50)
+      </label>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div class="total-box" style="min-width:160px">
+        <div class="lbl">Total calculado</div>
+        <div class="val" id="m-total-preview" style="font-size:18px">$0</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarEdicion()">💾 Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Modal Carga Masiva -->
+<style>
+.cm-chip{display:inline-block;padding:3px 10px;border-radius:99px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;margin:2px;transition:all .15s;font-family:inherit}
+.cm-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.cm-chip-on{background:var(--accent);color:#fff!important;border-color:var(--accent)!important}
+</style>
+<div class="modal-overlay" id="cm-overlay" style="display:none;z-index:10000" onclick="if(event.target===this)cerrarCargaMasiva()">
+  <div class="modal" style="max-width:900px">
+    <h2>
+      <span>⚡ Carga masiva de viáticos</span>
+      <button class="modal-close" onclick="cerrarCargaMasiva()">✕</button>
+    </h2>
+
+    <div style="background:var(--purple-bg);border:1px solid #c4b5fd;border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--purple);margin-bottom:16px">
+      Aplica viáticos a múltiples registros en un solo clic. Combina filtros por zona, ubicación o texto libre. Previsualiza antes de confirmar.
+    </div>
+
+    <!-- Fila 1: Filtros zona + acción -->
+    <div class="g2" style="margin-bottom:12px">
+      <div>
+        <label>Filtrar por zona / estado</label>
+        <select id="cm-filtro" onchange="renderCargaMasivaPreview()">
+          <option value="todos">Todos los registros</option>
+          <option value="sin_viatico">Sin viático asignado ($0)</option>
+          <option value="incompletos">Incompletos (⚠️)</option>
+          <option value="nacional">Zona nacional</option>
+          <option value="fronteriza">Zona fronteriza</option>
+          <option value="local">Zona local</option>
+        </select>
+      </div>
+      <div>
+        <label>¿Qué acción ejecutar?</label>
+        <select id="cm-accion" onchange="cmToggleValorFijo();renderCargaMasivaPreview()">
+          <option value="sugerido">Viático sugerido (zona + horas)</option>
+          <option value="recalc_zona">Recalcular sugerido (sobreescribir)</option>
+          <option value="fijo">Monto fijo para todos</option>
+          <option value="cambiar_zona">Cambiar zona (local → nacional, etc.)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Monto fijo -->
+    <div id="cm-valor-fijo-wrap" style="display:none;margin-bottom:12px">
+      <label>Monto fijo a asignar ($)</label>
+      <input id="cm-valor-fijo" type="number" placeholder="ej. 100" oninput="renderCargaMasivaPreview()" style="max-width:180px">
+    </div>
+
+    <div id="cm-cambiar-zona-wrap" style="display:none;margin-bottom:12px">
+      <label>Nueva zona a asignar</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;padding:7px 14px;border:2px solid var(--border);border-radius:var(--r);background:var(--surface);transition:all .15s" id="lbl-zona-nacional">
+          <input type="radio" name="cm-nueva-zona" value="nacional" onchange="renderCargaMasivaPreview()" style="accent-color:var(--accent)"> 🌎 Nacional
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;padding:7px 14px;border:2px solid var(--border);border-radius:var(--r);background:var(--surface);transition:all .15s" id="lbl-zona-fronteriza">
+          <input type="radio" name="cm-nueva-zona" value="fronteriza" onchange="renderCargaMasivaPreview()" style="accent-color:var(--accent)"> 🔲 Fronteriza
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;padding:7px 14px;border:2px solid var(--border);border-radius:var(--r);background:var(--surface);transition:all .15s" id="lbl-zona-local">
+          <input type="radio" name="cm-nueva-zona" value="local" onchange="renderCargaMasivaPreview()" style="accent-color:var(--accent)"> 🏙 Local
+        </label>
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted)">
+        💡 Al cambiar la zona también se recalcula el viático sugerido automáticamente.
+      </div>
+    </div>
+
+    <!-- Búsqueda por texto libre -->
+    <div style="margin-bottom:10px">
+      <label>🔍 Buscar por origen, destino, custodio o consecutivo</label>
+      <input id="cm-busq-texto" type="text" placeholder="ej. TLAXCALA, PIQ, CUERNAVACA, BXC-4..." oninput="renderCargaMasivaPreview()" style="max-width:100%">
+    </div>
+
+    <!-- Chips de ubicación -->
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <label style="margin:0">📍 Filtrar por ubicación frecuente</label>
+        <button type="button" class="btn btn-sm" onclick="cmLimpiarChips()" style="font-size:11px;padding:2px 8px">Limpiar selección</button>
+      </div>
+      <div id="cm-chips-wrap" style="line-height:2"></div>
+    </div>
+
+    <!-- Opciones -->
+    <div style="display:flex;gap:24px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="cm-aplicar-c2" checked onchange="renderCargaMasivaPreview()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+        Aplicar también a custodio 2
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="cm-recarga" onchange="renderCargaMasivaPreview()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+        📱 Activar recarga telefónica (+$50) a todos
+      </label>
+    </div>
+
+    <!-- Resumen -->
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)" id="cm-count">0 registros</span>
+      <div style="display:flex;gap:20px;align-items:center">
+        <span style="font-size:12px;color:var(--success);font-weight:700" id="cm-resumen-cambios"></span>
+        <span style="font-size:12px;color:var(--muted)">Total nuevo:</span>
+        <span style="font-size:18px;font-weight:800;color:var(--accent)" id="cm-resumen-total">$0</span>
+      </div>
+    </div>
+
+    <!-- Preview tabla -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Previsualización (máx. 40 filas)</div>
+    <div class="tbl-wrap" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r)">
+      <table style="min-width:620px">
+        <thead>
+          <tr>
+            <th>Consec.</th>
+            <th>Custodios</th>
+            <th>Origen → Destino</th>
+            <th style="text-align:center">Zona</th>
+            <th style="text-align:center">Hrs</th>
+            <th style="text-align:right">Actual</th>
+            <th style="text-align:right">Nuevo</th>
+            <th style="text-align:right">Total</th>
+          </tr>
+        </thead>
+        <tbody id="cm-preview-tbody">
+          <tr><td colspan="8" class="empty">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn" onclick="cerrarCargaMasiva()">Cancelar</button>
+      <button class="btn" style="background:#7c3aed;color:#fff;border-color:#6d28d9;font-weight:700" onclick="aplicarCargaMasiva()">⚡ Aplicar carga masiva</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── NAVEGACIÓN ───────────────────────────────────────────────────────
+function navTo(pageId, icon, title, sub) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+  var pg = document.getElementById(pageId);
+  if (pg) pg.classList.add('active');
+  // Activate correct nav item
+  document.querySelectorAll('.nav-item').forEach(function(n){
+    var oc = n.getAttribute('onclick') || '';
+    if (oc.includes("'" + pageId + "'") || oc.includes('"' + pageId + '"')) n.classList.add('active');
+  });
+  if (icon) document.getElementById('topbar-icon').textContent = icon;
+  if (title) document.getElementById('topbar-title').textContent = title;
+  if (sub) document.getElementById('topbar-sub').textContent = sub;
+  // Trigger renders
+  if (pageId === 'pg-tabla') { renderTable(); renderGroup(); }
+  if (pageId === 'pg-dashboard') renderRecent();
+  if (pageId === 'pg-historial') renderHistorial();
+  // Fix Leaflet map if going to nuevo
+  if (pageId === 'pg-nuevo' && mapObj) setTimeout(function(){ mapObj.invalidateSize(); }, 100);
+}
+
+function renderRecent() {
+  var tbody = document.getElementById('tbody-recent');
+  if (!tbody) return;
+  var last5 = records.slice(-5).reverse();
+  if (!last5.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--hint);padding:20px;font-style:italic">Sin registros aún</td></tr>';
+    return;
+  }
+  tbody.innerHTML = last5.map(function(r){
+    return '<tr>' +
+      '<td style="font-weight:700;color:var(--p5)">' + r.cons + '</td>' +
+      '<td><span class="badge ' + bClass(r.servicio) + '">' + bLabel(r.servicio) + '</span></td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + (r.origen||'—') + ' → ' + (r.destino||'—') + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + r.custodios + '</td>' +
+      '<td style="text-align:right;font-weight:700;color:#6ee7b7">$' + r.total.toLocaleString() + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+// ─── RECARGAS ─────────────────────────────────────────────────────────
+function exportarRecargas() {
+  if (!records.length) { toast('⚠️ No hay registros para exportar.'); return; }
+  var elementos = {};
+  records.forEach(function(r) {
+    var pares = [];
+    if (r.c1 && (r.recarga1||0) > 0)
+      pares.push({ nombre: r.c1, emp: r.e1||'', recarga: r.recarga1||0, cons: r.cons, servicio: r.servicio, fecha: r.fi||'', horario: r.horario });
+    var c2n = r.c2 || (r.custodios&&r.custodios.includes(' / ')?r.custodios.split(' / ')[1].trim():'');
+    if (c2n && (r.recarga2||0) > 0)
+      pares.push({ nombre: c2n, emp: r.e2||'', recarga: r.recarga2||0, cons: r.cons, servicio: r.servicio, fecha: r.fi||'', horario: r.horario });
+    pares.forEach(function(p) {
+      if (!p.nombre) return;
+      if (!elementos[p.nombre]) elementos[p.nombre] = { emp: p.emp, recargas: [] };
+      elementos[p.nombre].recargas.push({ cons: p.cons, servicio: p.servicio, fecha: p.fecha, horario: p.horario, monto: p.recarga });
+    });
+  });
+  var nombres = Object.keys(elementos).sort();
+  if (!nombres.length) { toast('ℹ️ No hay recargas registradas.', 4000); return; }
+  var wb = XLSX.utils.book_new();
+  var res = [['N° Empleado','Elemento','N° Recargas','Total ($)']];
+  nombres.forEach(function(n){
+    var el=elementos[n], tot=el.recargas.reduce(function(a,r){return a+r.monto;},0);
+    res.push([el.emp||'',n,el.recargas.length,tot]);
+  });
+  res.push([]); res.push(['','GRAN TOTAL',nombres.reduce(function(a,n){return a+elementos[n].recargas.length;},0),nombres.reduce(function(a,n){return a+elementos[n].recargas.reduce(function(b,r){return b+r.monto;},0);},0)]);
+  var ws1=XLSX.utils.aoa_to_sheet(res); ws1['!cols']=[{wch:13},{wch:35},{wch:12},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Resumen');
+  var det=[['N° Empleado','Elemento','Consecutivo','Servicio','Fecha','Horario','Recarga ($)']];
+  nombres.forEach(function(n){
+    var el=elementos[n];
+    el.recargas.forEach(function(r){det.push([el.emp||'',n,r.cons,r.servicio,r.fecha,r.horario,r.monto]);});
+  });
+  var ws2=XLSX.utils.aoa_to_sheet(det); ws2['!cols']=[{wch:13},{wch:35},{wch:12},{wch:24},{wch:12},{wch:30},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Detalle');
+  XLSX.writeFile(wb,'recargas_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Recargas exportadas — '+nombres.length+' elemento(s)');
+}
+
+// ─── VIÁTICOS SEMANALES — MÓDULO COMPLETO ────────────────────────────
+var vsPeriodos = JSON.parse(localStorage.getItem('vs_periodos') || '[]');
+var vsSemanas = [];
+var vsElementos = [];
+
+function vsSaveP() { localStorage.setItem('vs_periodos', JSON.stringify(vsPeriodos)); }
+
+function abrirViaticosSemanales() {
+  vsSemanas = []; vsElementos = [];
+  document.getElementById('vs-periodo').value = '';
+  document.getElementById('vs-fecha-ini').value = '';
+  document.getElementById('vs-fecha-fin').value = '';
+  document.getElementById('vs-elem-nombre').value = '';
+  document.getElementById('vs-elem-emp').value = '';
+  document.getElementById('vs-semanas-wrap').innerHTML = '';
+  vsRenderSemanas(); vsRenderElementos();
+  vsAgregarSemana('Semana 1', '');
+  vsAgregarSemana('Semana 2', '');
+  document.getElementById('vs-overlay').style.display = 'flex';
+}
+
+function cerrarViaticosSemanales() {
+  document.getElementById('vs-overlay').style.display = 'none';
+}
+
+function vsAgregarSemana(nombre, monto) {
+  vsSemanas.push({ id: Date.now() + Math.random(), nombre: nombre || '', monto: monto !== undefined ? monto : '' });
+  vsRenderSemanas(); vsRefreshSelect();
+}
+
+function vsEliminarSemana(id) {
+  vsSemanas = vsSemanas.filter(function(s){ return s.id !== id; });
+  vsElementos = vsElementos.filter(function(e){ return e.semanaId !== id; });
+  vsRenderSemanas(); vsRenderElementos(); vsRefreshSelect(); vsActTotal();
+}
+
+function vsUpdateSemana(id, campo, valor) {
+  var s = vsSemanas.find(function(x){ return x.id === id; });
+  if (!s) return;
+  s[campo] = campo === 'monto' ? (parseFloat(valor) || '') : valor;
+  vsRefreshSelect(); vsActMontos();
+}
+
+function vsRenderSemanas() {
+  var w = document.getElementById('vs-semanas-wrap');
+  if (!vsSemanas.length) { w.innerHTML = '<div style="font-size:12px;color:var(--hint);padding:6px 0">Sin semanas — presiona "+ Agregar semana"</div>'; return; }
+  w.innerHTML = vsSemanas.map(function(s) {
+    return '<div style="display:grid;grid-template-columns:1fr 140px auto;gap:8px;align-items:center;margin-bottom:6px">' +
+      '<input type="text" value="'+escAttr(s.nombre||'')+'" placeholder="Nombre (ej. Semana 1 — ingresaron 10 may)" oninput="vsUpdateSemana('+s.id+',\'nombre\',this.value)" style="font-size:12px;padding:7px 10px">' +
+      '<input type="number" value="'+(s.monto||'')+'" placeholder="Monto ($)" oninput="vsUpdateSemana('+s.id+',\'monto\',this.value)" style="font-size:12px;padding:7px 10px">' +
+      '<button class="del-btn" onclick="vsEliminarSemana('+s.id+')">✕</button></div>';
+  }).join('');
+}
+
+function vsRefreshSelect() {
+  var sel = document.getElementById('vs-elem-semana');
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">Seleccionar semana...</option>' +
+    vsSemanas.map(function(s){
+      return '<option value="'+s.id+'">'+(s.nombre||'Sin nombre')+' — $'+(s.monto||'0')+'</option>';
+    }).join('');
+  if (prev) sel.value = prev;
+}
+
+function vsActMontos() {
+  vsElementos.forEach(function(e){
+    var s = vsSemanas.find(function(x){ return x.id == e.semanaId; });
+    if (s) { e.monto = parseFloat(s.monto) || 0; e.semaNombre = s.nombre; }
+  });
+  vsRenderElementos(); vsActTotal();
+}
+
+function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function vsBuscarElem() {
+  var q = document.getElementById('vs-elem-nombre').value.trim().toLowerCase();
+  var sug = document.getElementById('vs-sug-lista');
+  if (q.length < 2) { sug.innerHTML=''; return; }
+  var enc = {};
+  records.forEach(function(r){
+    if (r.c1 && r.c1.toLowerCase().includes(q)) enc[r.c1] = r.e1||'';
+    var c2n = r.c2||(r.custodios&&r.custodios.includes(' / ')?r.custodios.split(' / ')[1].trim():'');
+    if (c2n && c2n.toLowerCase().includes(q)) enc[c2n] = r.e2||'';
+  });
+  var lista = Object.keys(enc).slice(0,6);
+  if (!lista.length) { sug.innerHTML=''; return; }
+  sug.innerHTML = '<div class="autocomplete-list" style="display:block;position:relative;z-index:10000">' +
+    lista.map(function(n){
+      return '<div onclick="vsSelElem(\''+escAttr(n)+'\',\''+escAttr(enc[n])+'\')">' + n +
+        (enc[n]?'<span style="color:var(--hint);font-size:11px;margin-left:6px">Emp: '+enc[n]+'</span>':'') + '</div>';
+    }).join('') + '</div>';
+}
+
+function vsSelElem(nombre, emp) {
+  document.getElementById('vs-elem-nombre').value = nombre;
+  document.getElementById('vs-elem-emp').value = emp;
+  document.getElementById('vs-sug-lista').innerHTML = '';
+}
+
+function vsAgregarElemento() {
+  var nombre = document.getElementById('vs-elem-nombre').value.trim().toUpperCase();
+  var emp    = document.getElementById('vs-elem-emp').value.trim();
+  var semId  = document.getElementById('vs-elem-semana').value;
+  if (!nombre) { toast('⚠️ Ingresa el nombre del elemento.'); return; }
+  if (!semId)  { toast('⚠️ Selecciona la semana de entrada.'); return; }
+  var sem = vsSemanas.find(function(s){ return s.id == semId; });
+  if (!sem || !sem.monto) { toast('⚠️ Define el monto de esa semana primero.'); return; }
+  if (vsElementos.find(function(e){ return e.nombre === nombre; })) { toast('⚠️ '+nombre+' ya está en la lista.'); return; }
+  vsElementos.push({ nombre: nombre, emp: emp, semanaId: sem.id, semaNombre: sem.nombre, monto: parseFloat(sem.monto)||0 });
+  document.getElementById('vs-elem-nombre').value = '';
+  document.getElementById('vs-elem-emp').value = '';
+  document.getElementById('vs-sug-lista').innerHTML = '';
+  vsRenderElementos(); vsActTotal();
+}
+
+function vsQuitarElemento(nombre) {
+  vsElementos = vsElementos.filter(function(e){ return e.nombre !== nombre; });
+  vsRenderElementos(); vsActTotal();
+}
+
+function vsRenderElementos() {
+  var tb = document.getElementById('vs-elem-tbody');
+  if (!vsElementos.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--hint);padding:16px;font-style:italic">Sin elementos — agrégalos arriba</td></tr>';
+    document.getElementById('vs-count').textContent = '0';
+    return;
+  }
+  tb.innerHTML = vsElementos.map(function(e, i){
+    var bg = i%2===0?'var(--surface)':'var(--surface2)';
+    return '<tr style="background:'+bg+'">' +
+      '<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+(e.emp||'—')+'</td>' +
+      '<td style="padding:7px 10px;font-weight:600">'+e.nombre+'</td>' +
+      '<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+(e.semaNombre||'')+'</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-weight:700;color:var(--green)">$'+(e.monto||0).toLocaleString()+'</td>' +
+      '<td style="padding:7px 10px;text-align:center"><button class="del-btn" onclick="vsQuitarElemento(\''+escAttr(e.nombre)+'\')">✕</button></td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('vs-count').textContent = vsElementos.length;
+}
+
+function vsActTotal() {
+  var tot = vsElementos.reduce(function(a,e){ return a+(e.monto||0); },0);
+  document.getElementById('vs-total-val').textContent = '$'+tot.toLocaleString();
+}
+
+function vsGuardar() {
+  var periodo = document.getElementById('vs-periodo').value.trim();
+  if (!periodo) { toast('⚠️ Ingresa el nombre del período.'); return; }
+  if (!vsElementos.length) { toast('⚠️ Agrega al menos un elemento.'); return; }
+  var obj = {
+    id: Date.now(), periodo: periodo,
+    fechaIni: document.getElementById('vs-fecha-ini').value,
+    fechaFin: document.getElementById('vs-fecha-fin').value,
+    semanas: JSON.parse(JSON.stringify(vsSemanas)),
+    elementos: JSON.parse(JSON.stringify(vsElementos)),
+    total: vsElementos.reduce(function(a,e){ return a+(e.monto||0); },0),
+    fecha: new Date().toLocaleString('es-MX')
+  };
+  vsPeriodos.push(obj); vsSaveP();
+  // Sumar al total de cada elemento en records
+  vsElementos.forEach(function(ve){
+    records.forEach(function(r){
+      if (r.c1 && r.c1.toUpperCase()===ve.nombre) { r.vsExtra1=(r.vsExtra1||0)+(ve.monto||0); r.total+=(ve.monto||0); }
+      var c2n=r.c2||(r.custodios&&r.custodios.includes(' / ')?r.custodios.split(' / ')[1].trim():'');
+      if (c2n && c2n.toUpperCase()===ve.nombre) { r.vsExtra2=(r.vsExtra2||0)+(ve.monto||0); r.total+=(ve.monto||0); }
+    });
+  });
+  save(); updateStats(); renderTable(); renderGroup();
+  cerrarViaticosSemanales();
+  toast('✅ Período "'+periodo+'" guardado — '+vsElementos.length+' elemento(s) · $'+obj.total.toLocaleString()+' sumados', 5000);
+}
+
+function vsExportar() {
+  var periodo = document.getElementById('vs-periodo').value.trim() || 'Período';
+  if (!vsElementos.length) { toast('⚠️ Agrega elementos antes de exportar.'); return; }
+  var wb = XLSX.utils.book_new();
+  var aoa = [[periodo],[],['N° Empleado','Elemento','Semana de entrada','Monto ($)']];
+  vsElementos.forEach(function(e){ aoa.push([e.emp||'',e.nombre,e.semaNombre||'',e.monto||0]); });
+  aoa.push([]); aoa.push(['','TOTAL','',vsElementos.reduce(function(a,e){return a+(e.monto||0);},0)]);
+  var ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:13},{wch:35},{wch:28},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Dispersión período');
+  var aoa2=[['Semana de entrada','Monto ($)']];
+  vsSemanas.forEach(function(s){ aoa2.push([s.nombre||'',s.monto||0]); });
+  var ws2=XLSX.utils.aoa_to_sheet(aoa2); ws2['!cols']=[{wch:40},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Semanas y montos');
+  XLSX.writeFile(wb,'viaticos_semanales_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Exportado — '+vsElementos.length+' elemento(s)');
+}
+
+
+// ─── ESTADO GLOBAL ────────────────────────────────────────────────────
+let records = JSON.parse(localStorage.getItem('viaticos_v4') || '[]');
+let seq = records.length ? Math.max(...records.map(r => r.id)) + 1 : 1;
+let mapObj = null, routeLayers = [];
+let currentTrayHrs = null, currentTrayKm = null;
+let timers = { base: null, orig: null, dest: null, base2: null };
+let mTimers = {};
+let editingId = null;
+
+// ─── TARIFAS — fuente única de verdad ─────────────────────────────────
+const TARIFAS = {
+  nacional:   { turnoCompleto: 200, turno1: 100, porHora: 50 },
+  fronteriza: { turnoCompleto: 300, turno1: 150, porHora: 75 }
+};
+
+// ─── TOAST (reemplaza alert/confirm visual) ───────────────────────────
+function toast(msg, duration) {
+  duration = duration || 3000;
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ─── PERSISTENCIA ─────────────────────────────────────────────────────
+function save() { localStorage.setItem('viaticos_v4', JSON.stringify(records)); }
+
+// ─── GEOCODIFICACIÓN ──────────────────────────────────────────────────
+function esc(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+async function buscar(prefix) {
+  const val = document.getElementById(prefix + '-input').value.trim();
+  const list = document.getElementById(prefix + '-list');
+  if (val.length < 3) { list.style.display = 'none'; return; }
+  clearTimeout(timers[prefix]);
+  timers[prefix] = setTimeout(async () => {
+    try {
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(val) + '&countrycodes=mx&limit=6&addressdetails=1&accept-language=es';
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es', 'User-Agent': 'CalculadoraViaticos/3.0' } });
+      const data = await res.json();
+      if (!data.length) { list.style.display = 'none'; return; }
+      list.innerHTML = data.map(f => '<div onclick="seleccionar(\'' + prefix + '\',' + parseFloat(f.lat) + ',' + parseFloat(f.lon) + ',\'' + esc(f.display_name) + '\')">' + f.display_name + '</div>').join('');
+      list.style.display = 'block';
+    } catch(e) { list.style.display = 'none'; }
+  }, 400);
+}
+
+function seleccionar(prefix, lat, lng, nombre) {
+  document.getElementById(prefix + '-input').value = nombre;
+  document.getElementById(prefix + '-lat').value = lat;
+  document.getElementById(prefix + '-lng').value = lng;
+  document.getElementById(prefix + '-name').value = nombre;
+  document.getElementById(prefix + '-coord').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+  document.getElementById(prefix + '-list').style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.loc-wrap'))
+    document.querySelectorAll('.autocomplete-list').forEach(function(l) { l.style.display = 'none'; });
+});
+
+async function buscarModal(fieldId) {
+  const val = document.getElementById(fieldId).value.trim();
+  const list = document.getElementById(fieldId + '-list');
+  if (!list) return;
+  if (val.length < 3) { list.style.display = 'none'; return; }
+  clearTimeout(mTimers[fieldId]);
+  mTimers[fieldId] = setTimeout(async () => {
+    try {
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(val) + '&countrycodes=mx&limit=6&addressdetails=1&accept-language=es';
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es', 'User-Agent': 'CalculadoraViaticos/3.0' } });
+      const data = await res.json();
+      if (!data.length) { list.style.display = 'none'; return; }
+      list.innerHTML = data.map(f => '<div onclick="seleccionarModal(\'' + fieldId + '\',' + parseFloat(f.lat) + ',' + parseFloat(f.lon) + ',\'' + esc(f.display_name) + '\')">' + f.display_name + '</div>').join('');
+      list.style.display = 'block';
+    } catch(e) { list.style.display = 'none'; }
+  }, 400);
+}
+
+function seleccionarModal(fieldId, lat, lng, nombre) {
+  document.getElementById(fieldId).value = nombre;
+  var latEl = document.getElementById(fieldId + '-lat');
+  var lngEl = document.getElementById(fieldId + '-lng');
+  if (latEl) latEl.value = lat;
+  if (lngEl) lngEl.value = lng;
+  var list = document.getElementById(fieldId + '-list');
+  if (list) list.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  ['m-base', 'm-base2', 'm-origen', 'm-destino'].forEach(function(id) {
+    var list = document.getElementById(id + '-list');
+    var input = document.getElementById(id);
+    if (list && input && !input.contains(e.target) && !list.contains(e.target))
+      list.style.display = 'none';
+  });
+});
+
+// ─── CÁLCULO DE RUTA (FORMULARIO) ────────────────────────────────────
+async function calcularRuta() {
+  var blat = document.getElementById('base-lat').value, blng = document.getElementById('base-lng').value;
+  var olat = document.getElementById('orig-lat').value, olng = document.getElementById('orig-lng').value;
+  var dlat = document.getElementById('dest-lat').value, dlng = document.getElementById('dest-lng').value;
+  var b2lat = document.getElementById('base2-lat').value, b2lng = document.getElementById('base2-lng').value;
+  var bname = document.getElementById('base-name').value || 'Base';
+  var oname = document.getElementById('orig-name').value || 'Origen';
+  var dname = document.getElementById('dest-name').value || 'Destino';
+  var b2name = document.getElementById('base2-name').value || 'Base llegada';
+  if (!blat || !olat || !dlat || !b2lat) { toast('⚠️ Selecciona Base salida, Origen, Destino y Base llegada de las sugerencias.'); return; }
+  var status = document.getElementById('calc-status');
+  status.style.display = 'inline'; status.textContent = 'Calculando rutas...';
+  try {
+    var tramos = [
+      { from: [blng, blat], to: [olng, olat], label1: bname, label2: oname, elId: '1', color: '#7c3aed' },
+      { from: [dlng, dlat], to: [b2lng, b2lat], label1: dname, label2: b2name, elId: '3', color: '#166534' }
+    ];
+    var trayKmMaps = 0, trayHrsMaps = 0, allCoords = [];
+    document.getElementById('map').style.display = 'block';
+    if (!mapObj) {
+      mapObj = L.map('map').setView([19.4, -99.1], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapObj);
+    }
+    routeLayers.forEach(function(l) { mapObj.removeLayer(l); });
+    routeLayers = [];
+    for (var i = 0; i < tramos.length; i++) {
+      var t = tramos[i];
+      var url = 'https://router.project-osrm.org/route/v1/driving/' + t.from[0] + ',' + t.from[1] + ';' + t.to[0] + ',' + t.to[1] + '?overview=full&geometries=geojson';
+      var res = await fetch(url);
+      var data = await res.json();
+      var route = data.routes[0];
+      var km = parseFloat((route.distance / 1000).toFixed(1));
+      var hrs = route.duration / 3600;
+      trayHrsMaps += hrs; trayKmMaps += km;
+      document.getElementById('tr-label' + t.elId).textContent = t.label1 + ' → ' + t.label2;
+      document.getElementById('tr-h' + t.elId).textContent = fmtHrs(hrs);
+      document.getElementById('tr-km' + t.elId).textContent = km + ' km';
+      var coords = route.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+      coords.forEach(function(c) { allCoords.push(c); });
+      routeLayers.push(L.polyline(coords, { color: t.color, weight: 4, opacity: .85 }).addTo(mapObj));
+    }
+    var coordOrig = [parseFloat(olat), parseFloat(olng)], coordDest = [parseFloat(dlat), parseFloat(dlng)];
+    allCoords.push(coordOrig, coordDest);
+    routeLayers.push(L.polyline([coordOrig, coordDest], { color: '#2563a8', weight: 4, opacity: .85, dashArray: '8,6' }).addTo(mapObj));
+    document.getElementById('tr-label2').textContent = oname + ' → ' + dname;
+    [{ lat: blat, lng: blng, label: '🏠 Base salida' }, { lat: olat, lng: olng, label: '📍 Origen' },
+     { lat: dlat, lng: dlng, label: '🏁 Destino' }, { lat: b2lat, lng: b2lng, label: '🏠 Base llegada' }].forEach(function(p) {
+      routeLayers.push(L.marker([parseFloat(p.lat), parseFloat(p.lng)]).addTo(mapObj).bindPopup(p.label));
+    });
+    if (allCoords.length) mapObj.fitBounds(L.latLngBounds(allCoords), { padding: [20, 20] });
+    setTimeout(function() { mapObj.invalidateSize(); }, 100);
+    currentTrayHrs = +trayHrsMaps.toFixed(2);
+    currentTrayKm = +trayKmMaps.toFixed(1);
+    document.getElementById('tr-htot').textContent = fmtHrs(trayHrsMaps) + ' (tramos 1+3)';
+    document.getElementById('tr-kmtot').textContent = trayKmMaps.toFixed(1) + ' km (tramos 1+3)';
+    document.getElementById('tray-resumen').style.display = 'block';
+    status.textContent = '✓ Listo';
+    setTimeout(function() { status.style.display = 'none'; }, 2000);
+    calcHoras();
+  } catch(e) {
+    status.textContent = 'Error al calcular. Verifica las ubicaciones.';
+    console.error(e);
+  }
+}
+
+function usarTiempo() {
+  if (currentTrayHrs !== null) {
+    document.getElementById('htray').value = currentTrayHrs.toFixed(2);
+    calcHoras();
+  }
+}
+
+// ─── CÁLCULO DE RUTA (MODAL) ──────────────────────────────────────────
+async function calcularRutaModal() {
+  var blat = document.getElementById('m-base-lat').value, blng = document.getElementById('m-base-lng').value;
+  var olat = document.getElementById('m-origen-lat').value, olng = document.getElementById('m-origen-lng').value;
+  var dlat = document.getElementById('m-destino-lat').value, dlng = document.getElementById('m-destino-lng').value;
+  var b2lat = document.getElementById('m-base2-lat').value, b2lng = document.getElementById('m-base2-lng').value;
+  var bname = document.getElementById('m-base').value || 'Base salida';
+  var oname = document.getElementById('m-origen').value || 'Origen';
+  var dname = document.getElementById('m-destino').value || 'Destino';
+  var b2name = document.getElementById('m-base2').value || 'Base llegada';
+  if (!blat || !olat || !dlat || !b2lat) { toast('⚠️ Selecciona las 4 ubicaciones del buscador GPS antes de calcular.'); return; }
+  var status = document.getElementById('m-calc-status');
+  var btn = document.getElementById('m-calc-btn');
+  status.style.display = 'inline'; status.textContent = 'Calculando...';
+  btn.disabled = true;
+  try {
+    var tramos = [
+      { from: [blng, blat], to: [olng, olat], label1: bname, label2: oname, elId: '1' },
+      { from: [dlng, dlat], to: [b2lng, b2lat], label1: dname, label2: b2name, elId: '3' }
+    ];
+    var totalHrs = 0, totalKm = 0;
+    for (var t of tramos) {
+      var url = 'https://router.project-osrm.org/route/v1/driving/' + t.from[0] + ',' + t.from[1] + ';' + t.to[0] + ',' + t.to[1] + '?overview=false';
+      var res = await fetch(url);
+      var data = await res.json();
+      var route = data.routes[0];
+      var km = +(route.distance / 1000).toFixed(1);
+      var hrs = route.duration / 3600;
+      totalHrs += hrs; totalKm += km;
+      document.getElementById('m-tr-label' + t.elId).textContent = t.label1 + ' → ' + t.label2;
+      document.getElementById('m-tr-h' + t.elId).textContent = fmtHrs(hrs);
+      document.getElementById('m-tr-km' + t.elId).textContent = km + ' km';
+    }
+    document.getElementById('m-tr-htot').textContent = fmtHrs(totalHrs);
+    document.getElementById('m-tr-kmtot').textContent = totalKm.toFixed(1) + ' km';
+    document.getElementById('m-tray-rows').style.display = 'block';
+    document.getElementById('m-htray').value = +totalHrs.toFixed(2);
+    recalcModalTotal();
+    status.textContent = '✓ Listo'; btn.disabled = false;
+    setTimeout(function() { status.style.display = 'none'; }, 2500);
+  } catch(e) {
+    status.textContent = 'Error al calcular rutas'; btn.disabled = false; console.error(e);
+  }
+}
+
+// ─── LÓGICA DE HORAS Y VIÁTICOS ──────────────────────────────────────
+function diffHrs(fi, hi, ff, hf) {
+  if (!fi || !hi || !ff || !hf) return null;
+  var a = new Date(fi + 'T' + hi), b = new Date(ff + 'T' + hf);
+  var d = (b - a) / 3600000;
+  return d > 0 ? d : null;
+}
+function fmtHrs(h) {
+  if (h === null || h === undefined) return '—';
+  var hrs = Math.floor(h), min = Math.round((h - hrs) * 60);
+  return hrs + 'h' + (min ? ' ' + min + 'm' : '');
+}
+function sugerido(hServ, zona) {
+  if (!hServ || hServ <= 0 || !zona || zona === 'local') return 0;
+  var t = TARIFAS[zona];
+  if (!t) return 0;
+  var turnosCompletos = Math.floor(hServ / 24), hrsRest = hServ % 24;
+  var parcial = 0;
+  if (hrsRest <= 0) parcial = 0;
+  else if (hrsRest <= 12) parcial = t.turno1;
+  else if (hrsRest <= 18) parcial = t.turno1 + (Math.ceil(hrsRest - 12) * t.porHora);
+  else parcial = t.turnoCompleto;
+  return (turnosCompletos * t.turnoCompleto) + parcial;
+}
+function calcHoras() {
+  var fi = document.getElementById('fi').value, hi = document.getElementById('hi').value;
+  var ff = document.getElementById('ff').value, hf = document.getElementById('hf').value;
+  var htray = parseFloat(document.getElementById('htray').value) || 0;
+  var zona = document.getElementById('zona').value;
+  var hServ = diffHrs(fi, hi, ff, hf);
+  var hTot = hServ !== null ? hServ + htray : (htray || null);
+  document.getElementById('h-serv').textContent = hServ !== null ? fmtHrs(hServ) : '—';
+  document.getElementById('h-tray').textContent = htray ? fmtHrs(htray) : '—';
+  document.getElementById('h-tot').textContent = hTot !== null ? fmtHrs(hTot) : '—';
+  var hCalc = hTot !== null ? hTot : hServ;
+  if (hCalc !== null && zona) {
+    var sug = sugerido(hCalc, zona);
+    var zonaLabel = zona === 'local' ? 'Local — sin viático' : zona === 'fronteriza' ? 'Fronteriza' : 'Nacional';
+    var turnosC = Math.floor(hCalc / 24), hrsRest = hCalc % 24;
+    var hrsExtra = hrsRest > 12 && hrsRest <= 18 ? Math.ceil(hrsRest - 12) : 0;
+    var trayInfo = htray > 0 ? ' + ' + fmtHrs(htray) + ' trayecto' : '';
+    var desglose = zona === 'local' ? 'No aplica pago de viáticos' :
+      fmtHrs(hCalc) + ' total' + trayInfo + ' · ' +
+      (turnosC > 0 ? (turnosC + ' turno' + (turnosC > 1 ? 's' : '') + '×24h ') : '') +
+      (hrsRest <= 0 ? '' : hrsRest <= 12 ? '(0–12h)' : hrsRest <= 18 ? '(+' + hrsExtra + 'h extra)' : '(turno completo)');
+    ['sug1', 'sug2'].forEach(function(id) {
+      document.getElementById(id).style.display = 'block';
+      document.getElementById(id).textContent = 'Sugerido: $' + sug + ' · ' + zonaLabel + ' · ' + desglose;
+    });
+    if (!document.getElementById('v1').value) document.getElementById('v1').value = sug;
+    if (!document.getElementById('v2').value && document.getElementById('c2').value) document.getElementById('v2').value = sug;
+  } else {
+    ['sug1', 'sug2'].forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+  }
+  calcTotal();
+}
+function calcTotal() {
+  var v1 = parseFloat(document.getElementById('v1').value) || 0;
+  var v2 = parseFloat(document.getElementById('v2').value) || 0;
+  var r1 = document.getElementById('recarga1').checked ? 50 : 0;
+  var r2 = document.getElementById('recarga2').checked ? 50 : 0;
+  document.getElementById('preview').textContent = '$' + (v1 + v2 + r1 + r2).toLocaleString();
+}
+function toggleRecarga2() {
+  var hasc2 = document.getElementById('c2').value.trim() !== '';
+  document.getElementById('recarga2').disabled = !hasc2;
+  document.getElementById('recarga2-label').style.opacity = hasc2 ? '1' : '.4';
+  if (!hasc2) document.getElementById('recarga2').checked = false;
+  calcTotal();
+}
+
+// ─── AGREGAR REGISTRO ─────────────────────────────────────────────────
+function agregar() {
+  var cons = document.getElementById('cons').value.trim();
+  var servicio = document.getElementById('servicio').value;
+  var baseName = document.getElementById('base-name').value || document.getElementById('base-input').value.trim();
+  var base2Name = document.getElementById('base2-name').value || document.getElementById('base2-input').value.trim();
+  var origenName = document.getElementById('orig-name').value || document.getElementById('orig-input').value.trim();
+  var destinoName = document.getElementById('dest-name').value || document.getElementById('dest-input').value.trim();
+  var fi = document.getElementById('fi').value, hi = document.getElementById('hi').value;
+  var ff = document.getElementById('ff').value, hf = document.getElementById('hf').value;
+  var htray = parseFloat(document.getElementById('htray').value) || 0;
+  var c1 = document.getElementById('c1').value.trim();
+  var e1 = document.getElementById('e1').value.trim();
+  var c2 = document.getElementById('c2').value.trim();
+  var e2 = document.getElementById('e2').value.trim();
+  var v1 = parseFloat(document.getElementById('v1').value) || 0;
+  var v2 = parseFloat(document.getElementById('v2').value) || 0;
+  var recarga1 = document.getElementById('recarga1').checked ? 50 : 0;
+  var recarga2 = document.getElementById('recarga2').checked ? 50 : 0;
+  var zona = document.getElementById('zona').value;
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('msg').style.display = 'none';
+  if (!cons || !servicio || !baseName || !origenName || !destinoName || !c1 || document.getElementById('v1').value === '') {
+    document.getElementById('err').style.display = 'inline'; return;
+  }
+  var hServ = diffHrs(fi, hi, ff, hf);
+  var hTot = hServ !== null ? hServ + htray : (htray || null);
+  var total = v1 + (c2 ? v2 : 0) + recarga1 + (c2 ? recarga2 : 0);
+  var horario = fi && hi ? (fi + ' ' + hi + (ff && hf ? ' → ' + ff + ' ' + hf : '')) : '—';
+  records.push({
+    id: seq++, cons: cons, servicio: servicio, zona: zona,
+    base: baseName, base2: base2Name, origen: origenName, destino: destinoName,
+    horario: horario, fi: fi, hi: hi, ff: ff, hf: hf, hServ: hServ, htray: htray, hTot: hTot,
+    trayKm: currentTrayKm, custodios: c2 ? c1 + ' / ' + c2 : c1,
+    c1: c1, e1: e1, c2: c2, e2: e2, v1: v1, v2: v2, recarga1: recarga1, recarga2: recarga2, total: total, incomplete: false
+  });
+  save();
+  ['cons','fi','hi','ff','hf','htray','c1','e1','c2','e2','v1','v2'].forEach(function(id) { document.getElementById(id).value = ''; });
+  ['recarga1','recarga2'].forEach(function(id) { document.getElementById(id).checked = false; });
+  toggleRecarga2();
+  document.getElementById('servicio').value = '';
+  document.getElementById('zona').value = '';
+  ['base-input','orig-input','dest-input','base2-input'].forEach(function(id) { document.getElementById(id).value = ''; });
+  ['base-lat','base-lng','base-name','orig-lat','orig-lng','orig-name','dest-lat','dest-lng','dest-name','base2-lat','base2-lng','base2-name'].forEach(function(id) { document.getElementById(id).value = ''; });
+  ['base-coord','orig-coord','dest-coord','base2-coord'].forEach(function(id) { document.getElementById(id).textContent = ''; });
+  document.getElementById('preview').textContent = '$0';
+  document.getElementById('h-serv').textContent = '—';
+  document.getElementById('h-tray').textContent = '—';
+  document.getElementById('h-tot').textContent = '—';
+  ['sug1','sug2'].forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+  document.getElementById('tray-resumen').style.display = 'none';
+  document.getElementById('map').style.display = 'none';
+  currentTrayHrs = null; currentTrayKm = null;
+  document.getElementById('msg').style.display = 'inline';
+  setTimeout(function() { document.getElementById('msg').style.display = 'none'; }, 2500);
+  updateStats(); renderTable(); renderGroup();
+}
+
+// ─── ELIMINAR / LIMPIAR ──────────────────────────────────────────────
+function eliminar(id) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  records = records.filter(function(r) { return r.id !== id; });
+  save(); updateStats(); renderTable(); renderGroup();
+}
+function limpiarTodo() {
+  if (!confirm('¿Borrar TODOS los registros?')) return;
+  records = []; save(); updateStats(); renderTable(); renderGroup();
+}
+
+// ─── STATS Y TABLA ────────────────────────────────────────────────────
+function bClass(s) { return s.includes('FORANEO') ? 'badge bf' : s.includes('IN HOUSE') ? 'badge bh' : 'badge bo'; }
+function bLabel(s) { return s.includes('FORANEO') ? 'Foráneo' : s.includes('IN HOUSE') ? 'In House' : 'Otro'; }
+
+function updateStats() {
+  var n = records.length, tot = records.reduce(function(s, r) { return s + r.total; }, 0);
+  var avg = n ? Math.round(tot / n) : 0;
+  var ch = records.filter(function(r) { return r.hTot != null; });
+  var ah = ch.length ? ch.reduce(function(s, r) { return s + r.hTot; }, 0) / ch.length : null;
+  var ck = records.filter(function(r) { return r.trayKm != null; });
+  var ak = ck.length ? ck.reduce(function(s, r) { return s + r.trayKm; }, 0) / ck.length : null;
+  document.getElementById('st-cnt').textContent = n;
+  document.getElementById('st-tot').textContent = '$' + tot.toLocaleString();
+  document.getElementById('st-avg').textContent = '$' + avg.toLocaleString();
+  document.getElementById('st-hrs').textContent = ah !== null ? fmtHrs(ah) : '—';
+  document.getElementById('st-km').textContent = ak !== null ? Math.round(ak) + ' km' : '—';
+  var listos = records.filter(function(r) { return !r.incomplete && r.c1 && r.v1 > 0; }).length;
+  document.getElementById('disp-count').textContent = listos;
+  document.getElementById('disp-badge').style.display = listos > 0 ? 'inline-flex' : 'none';
+}
+
+function renderTable() {
+  var q = document.getElementById('buscar').value.toLowerCase().trim();
+  var campo = document.getElementById('buscar-campo').value;
+  var tb = document.getElementById('tbody');
+  var data = records.filter(function(r) {
+    if (!q) return true;
+    if (campo === 'elemento')    return (r.custodios || '').toLowerCase().includes(q) || (r.c1||'').toLowerCase().includes(q) || (r.c2||'').toLowerCase().includes(q);
+    if (campo === 'consecutivo') return (r.cons || '').toLowerCase().includes(q);
+    if (campo === 'servicio')    return (r.servicio || '').toLowerCase().includes(q);
+    if (campo === 'ruta')        return ((r.origen||'') + ' ' + (r.destino||'')).toLowerCase().includes(q);
+    if (campo === 'zona')        return (r.zona || '').toLowerCase().includes(q);
+    // todo
+    return (r.custodios||'').toLowerCase().includes(q) || (r.servicio||'').toLowerCase().includes(q) ||
+           (r.cons||'').toLowerCase().includes(q) || ((r.origen||'')+(r.destino||'')+(r.base||'')).toLowerCase().includes(q);
+  });
+  if (!data.length) { tb.innerHTML = '<tr><td colspan="14" class="empty">' + (records.length ? 'Sin resultados' : 'Sin registros aún') + '</td></tr>'; return; }
+  tb.innerHTML = data.map(function(r) {
+    return '<tr class="' + (r.incomplete ? 'incomplete-row' : '') + '">' +
+      '<td style="font-weight:700;color:var(--accent)">' + r.cons + '</td>' +
+      '<td><span class="' + bClass(r.servicio) + '">' + bLabel(r.servicio) + '</span><br><span style="font-size:10px;color:var(--hint)">' + r.servicio + '</span></td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + r.base + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + (r.base2 || r.base) + '</td>' +
+      '<td style="font-size:11px">' + r.origen + '<br><span style="color:var(--hint)">→ ' + r.destino + '</span></td>' +
+      '<td style="font-size:10px;color:var(--hint)">' + r.horario + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + (r.zona || '—') + '</td>' +
+      '<td style="text-align:center;font-weight:700">' + fmtHrs(r.hTot) + '</td>' +
+      '<td style="text-align:center;color:var(--muted);font-size:12px">' + (r.trayKm ? r.trayKm + ' km' : '—') + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + r.custodios + '</td>' +
+      '<td style="text-align:center;font-size:11px;color:var(--muted)">' + ([r.e1, r.e2].filter(Boolean).join(' / ') || '—') + '</td>' +
+      '<td style="text-align:center;font-size:11px">' + ((r.recarga1 || 0) + (r.recarga2 || 0) > 0 ? '📱 $' + ((r.recarga1 || 0) + (r.recarga2 || 0)) : '—') + '</td>' +
+      '<td style="text-align:right;font-weight:700">$' + r.total.toLocaleString() + '</td>' +
+      '<td style="white-space:nowrap;text-align:center"><button class="edit-btn" data-edit="' + r.id + '" title="Editar">✏️</button> <button class="del-btn" data-del="' + r.id + '" title="Eliminar">✕</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+document.addEventListener('click', function(e) {
+  var editBtn = e.target.closest('[data-edit]');
+  var delBtn = e.target.closest('[data-del]');
+  if (editBtn) abrirEditor(parseInt(editBtn.dataset.edit));
+  if (delBtn) eliminar(parseInt(delBtn.dataset.del));
+});
+
+function renderGroup() {
+  var ag = document.getElementById('agrupado');
+  if (!records.length) { ag.style.display = 'none'; return; }
+  ag.style.display = 'block';
+  var g = {};
+  records.forEach(function(r) {
+    var k = r.cons + '|' + r.servicio + '|' + r.origen + '|' + r.destino;
+    if (!g[k]) g[k] = { cons: r.cons, servicio: r.servicio, origen: r.origen, destino: r.destino, custs: [], total: 0, hTots: [], kms: [] };
+    r.custodios.split(' / ').forEach(function(c) { if (!g[k].custs.includes(c)) g[k].custs.push(c); });
+    g[k].total += r.total;
+    if (r.hTot != null) g[k].hTots.push(r.hTot);
+    if (r.trayKm) g[k].kms.push(r.trayKm);
+  });
+  document.getElementById('tbody-group').innerHTML = Object.values(g).sort(function(a, b) { return b.total - a.total; }).map(function(x) {
+    var hm = x.hTots.length ? Math.max.apply(null, x.hTots) : null;
+    var km = x.kms.length ? Math.max.apply(null, x.kms) : null;
+    return '<tr><td style="font-weight:700;color:var(--accent)">' + x.cons + '</td>' +
+      '<td><span class="' + bClass(x.servicio) + '">' + bLabel(x.servicio) + '</span><br><span style="font-size:10px;color:var(--hint)">' + x.servicio + '</span></td>' +
+      '<td style="font-size:11px">' + x.origen + '<br><span style="color:var(--hint)">→ ' + x.destino + '</span></td>' +
+      '<td style="text-align:center;font-weight:700">' + fmtHrs(hm) + '</td>' +
+      '<td style="text-align:center;color:var(--muted);font-size:12px">' + (km ? km + ' km' : '—') + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + x.custs.join(' / ') + '</td>' +
+      '<td style="text-align:right;font-weight:700">$' + x.total.toLocaleString() + '</td></tr>';
+  }).join('');
+}
+
+// ─── MODAL DE EDICIÓN ─────────────────────────────────────────────────
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && editingId !== null) cerrarModal(); });
+
+function abrirEditor(id) {
+  var r = records.find(function(x) { return x.id === id; });
+  if (!r) return;
+  editingId = id;
+  document.getElementById('modal-cons-title').textContent = r.cons;
+  document.getElementById('modal-incomplete-msg').style.display = r.incomplete ? 'block' : 'none';
+  document.getElementById('m-cons').value = r.cons || '';
+  document.getElementById('m-servicio').value = r.servicio || '';
+  document.getElementById('m-zona').value = r.zona || '';
+  document.getElementById('m-base').value = r.base || '';
+  document.getElementById('m-base2').value = r.base2 || '';
+  document.getElementById('m-origen').value = r.origen || '';
+  document.getElementById('m-destino').value = r.destino || '';
+  document.getElementById('m-fi').value = r.fi || '';
+  document.getElementById('m-hi').value = r.hi || '';
+  document.getElementById('m-ff').value = r.ff || '';
+  document.getElementById('m-hf').value = r.hf || '';
+  document.getElementById('m-c1').value = r.c1 || r.custodios.split(' / ')[0] || '';
+  document.getElementById('m-e1').value = r.e1 || '';
+  var _c2 = r.c2 || (r.custodios && r.custodios.includes(' / ') ? r.custodios.split(' / ')[1].trim() : '') || '';
+  document.getElementById('m-c2').value = _c2;
+  document.getElementById('m-e2').value = r.e2 || '';
+  document.getElementById('m-htray').value = r.htray || '';
+  document.getElementById('m-v1').value = r.v1 != null ? r.v1 : '';
+  document.getElementById('m-v2').value = r.v2 != null ? r.v2 : '';
+  document.getElementById('m-recarga1').checked = r.recarga1 > 0;
+  document.getElementById('m-recarga2').checked = r.recarga2 > 0;
+  recalcModalTotal();
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+
+function cerrarModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  document.getElementById('m-htray').value = '';
+  document.getElementById('m-tray-rows').style.display = 'none';
+  ['m-base-lat','m-base-lng','m-base2-lat','m-base2-lng','m-origen-lat','m-origen-lng','m-destino-lat','m-destino-lng'].forEach(function(id) { document.getElementById(id).value = ''; });
+  editingId = null;
+}
+
+function recalcModalTotal() {
+  var v1 = parseFloat(document.getElementById('m-v1').value) || 0;
+  var v2 = parseFloat(document.getElementById('m-v2').value) || 0;
+  var r1 = document.getElementById('m-recarga1').checked ? 50 : 0;
+  var r2 = document.getElementById('m-recarga2').checked ? 50 : 0;
+  var c2 = document.getElementById('m-c2').value.trim();
+  var total = v1 + (c2 ? v2 : 0) + r1 + (c2 ? r2 : 0);
+  document.getElementById('m-v2').placeholder = c2 ? 'Mismo monto que custodio 1' : 'Sin custodio 2';
+  document.getElementById('m-total-preview').textContent = '$' + total.toLocaleString();
+  var zona = document.getElementById('m-zona').value;
+  var fi = document.getElementById('m-fi').value, hi = document.getElementById('m-hi').value;
+  var ff = document.getElementById('m-ff').value, hf = document.getElementById('m-hf').value;
+  var panel = document.getElementById('m-sug-panel'), warn = document.getElementById('m-sug-missing');
+  var tieneHoras = fi && hi && ff && hf, tieneZona = !!zona;
+  if (tieneHoras && tieneZona) {
+    var hServ = diffHrs(fi, hi, ff, hf);
+    var mHtray = parseFloat(document.getElementById('m-htray').value) || 0;
+    var hCalc = hServ + mHtray;
+    var sug = sugerido(hCalc, zona);
+    var detalle = zona === 'local' ? 'Local · Sin viático' : (zona === 'fronteriza' ? 'Fronteriza' : 'Nacional') + ' · ' + fmtHrs(hCalc) + ' total' + (mHtray > 0 ? ' (serv ' + fmtHrs(hServ) + ' + tray ' + fmtHrs(mHtray) + ')' : '');
+    document.getElementById('m-sug-monto').textContent = '$' + sug.toLocaleString();
+    document.getElementById('m-sug-detalle').textContent = detalle;
+    panel.style.display = 'block'; warn.style.display = 'none';
+    panel.dataset.sug = sug;
+  } else {
+    panel.style.display = 'none';
+    warn.style.display = (tieneZona || tieneHoras) ? 'block' : 'none';
+  }
+}
+
+function aplicarSugerido() {
+  var sug = parseFloat(document.getElementById('m-sug-panel').dataset.sug) || 0;
+  document.getElementById('m-v1').value = sug;
+  if (document.getElementById('m-c2').value.trim()) document.getElementById('m-v2').value = sug;
+  recalcModalTotal();
+}
+
+function guardarEdicion() {
+  if (editingId === null) return;
+  var idx = records.findIndex(function(x) { return x.id === editingId; });
+  if (idx < 0) return;
+  var fi = document.getElementById('m-fi').value, hi = document.getElementById('m-hi').value;
+  var ff = document.getElementById('m-ff').value, hf = document.getElementById('m-hf').value;
+  var hServ = fi && hi && ff && hf ? diffHrs(fi, hi, ff, hf) : null;
+  var htray = parseFloat(document.getElementById('m-htray').value) || records[idx].htray || 0;
+  var hTot = hServ !== null ? hServ + htray : null;
+  var c1 = document.getElementById('m-c1').value.trim();
+  var c2 = document.getElementById('m-c2').value.trim();
+  var e1 = document.getElementById('m-e1').value.trim();
+  var e2 = document.getElementById('m-e2').value.trim();
+  var v1 = parseFloat(document.getElementById('m-v1').value) || 0;
+  var v2 = parseFloat(document.getElementById('m-v2').value) || 0;
+  var recarga1 = document.getElementById('m-recarga1').checked ? 50 : 0;
+  var recarga2 = document.getElementById('m-recarga2').checked ? 50 : 0;
+  var zona = document.getElementById('m-zona').value;
+  var base = document.getElementById('m-base').value.trim();
+  var base2 = document.getElementById('m-base2').value.trim();
+  var origen = document.getElementById('m-origen').value.trim();
+  var destino = document.getElementById('m-destino').value.trim();
+  var total = v1 + (c2 ? v2 : 0) + recarga1 + (c2 ? recarga2 : 0);
+  var horario = fi && hi ? (fi + ' ' + hi + (ff && hf ? ' → ' + ff + ' ' + hf : '')) : '—';
+  var incomplete = !origen || !destino || !c1;
+  records[idx] = Object.assign({}, records[idx], {
+    cons: document.getElementById('m-cons').value.trim(),
+    servicio: document.getElementById('m-servicio').value,
+    zona: zona, base: base, base2: base2, origen: origen, destino: destino,
+    horario: horario, fi: fi, hi: hi, ff: ff, hf: hf, hServ: hServ, hTot: hTot, htray: htray,
+    custodios: c2 ? c1 + ' / ' + c2 : c1,
+    c1: c1, e1: e1, c2: c2, e2: e2, v1: v1, v2: v2, recarga1: recarga1, recarga2: recarga2, total: total, incomplete: incomplete
+  });
+  save(); updateStats(); renderTable(); renderGroup();
+  cerrarModal();
+  toast('✅ Registro actualizado');
+}
+
+// ─── IMPORTAR EXCEL (MACHOTE) ─────────────────────────────────────────
+function importarExcel(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!rows.length) { toast('⚠️ El archivo está vacío o no tiene datos.'); return; }
+      var norm = function(s) { return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); };
+      var firstRow = rows[0];
+      var colMap = {};
+      Object.keys(firstRow).forEach(function(k) {
+        var n = norm(k);
+        if (n.includes('consec')) colMap.cons = k;
+        else if (n.includes('servicio')) colMap.servicio = k;
+        else if (n.includes('zona')) colMap.zona = k;
+        else if (n.includes('base') && n.includes('sal')) colMap.base = k;
+        else if (n.includes('base') && (n.includes('lleg') || n.includes('fin'))) colMap.base2 = k;
+        else if (n.includes('base') && !colMap.base) colMap.base = k;
+        else if (n.includes('origen') || n.includes('origin')) colMap.origen = k;
+        else if (n.includes('destino') || n.includes('destination')) colMap.destino = k;
+        else if (n.includes('fecha') && n.includes('ini')) colMap.fi = k;
+        else if (n.includes('hora') && n.includes('ini')) colMap.hi = k;
+        else if (n.includes('fecha') && n.includes('fin')) colMap.ff = k;
+        else if (n.includes('hora') && n.includes('fin')) colMap.hf = k;
+        else if ((n.includes('custodio') || n.includes('custodia')) && !n.includes('2') && !n.includes('num') && !n.includes('emp')) colMap.c1 = k;
+        else if ((n.includes('custodio') || n.includes('custodia')) && n.includes('2')) colMap.c2 = k;
+        else if ((n.includes('num') || n.includes('n') && n.includes('emp')) && !n.includes('2')) colMap.e1 = k;
+        else if ((n.includes('num') || n.includes('n') && n.includes('emp')) && n.includes('2')) colMap.e2 = k;
+        else if (n.includes('viatico') && !n.includes('2')) colMap.v1 = k;
+        else if (n.includes('viatico') && n.includes('2')) colMap.v2 = k;
+      });
+      var parseDate = function(v) {
+        if (!v) return '';
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        var s = String(v).trim();
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) { var parts = s.split('/'); return parts[2] + '-' + parts[1] + '-' + parts[0]; }
+        return s.slice(0, 10);
+      };
+      var parseTime = function(v) {
+        if (!v) return '';
+        if (v instanceof Date) return v.toTimeString().slice(0, 5);
+        var s = String(v).trim();
+        if (/^\d{1,2}:\d{2}/.test(s)) return s.slice(0, 5);
+        return '';
+      };
+      // Omitir filas de ejemplo
+      var dataRows = rows.filter(function(row) {
+        var g = function(key) { return key && colMap[key] ? String(row[colMap[key]] || '').trim() : ''; };
+        return !g('cons').toLowerCase().startsWith('ej.');
+      });
+      var importados = 0;
+      dataRows.forEach(function(row) {
+        var g = function(key) { return key && colMap[key] ? String(row[colMap[key]] || '').trim() : ''; };
+        var cons = g('cons') || ('IMP-' + seq);
+        var c1raw = g('c1') || '';
+        var c2raw = g('c2') || '';
+        var e1raw = g('e1') || '';
+        var e2raw = g('e2') || '';
+        var fi = parseDate(row[colMap.fi] || '');
+        var ff = parseDate(row[colMap.ff] || '');
+        var hi = parseTime(row[colMap.hi] || '');
+        var hf = parseTime(row[colMap.hf] || '');
+        var hServ = fi && hi && ff && hf ? diffHrs(fi, hi, ff, hf) : null;
+        var htray = 0;
+        var hTot = hServ !== null ? hServ + htray : null;
+        var zonaRaw = g('zona').toLowerCase();
+        var zonaFinal = zonaRaw.includes('front') ? 'fronteriza' : zonaRaw.includes('loc') ? 'local' : zonaRaw.includes('nac') ? 'nacional' : g('zona') || '';
+        var v1raw = parseFloat(g('v1') || '0') || 0;
+        var v2raw = parseFloat(g('v2') || '0') || 0;
+        var v1Final = v1raw || (hServ !== null && zonaFinal ? sugerido(hServ, zonaFinal) : 0);
+        var v2Final = v2raw || (c2raw && hServ !== null && zonaFinal ? sugerido(hServ, zonaFinal) : 0);
+        var incomplete = !g('origen') || !g('destino') || !c1raw || !fi || !zonaFinal;
+        records.push({
+          id: seq++, cons: cons, servicio: g('servicio') || '', zona: zonaFinal,
+          base: g('base') || '', base2: g('base2') || '', origen: g('origen') || '', destino: g('destino') || '',
+          horario: fi && hi ? (fi + ' ' + hi + (ff && hf ? ' → ' + ff + ' ' + hf : '')) : '—',
+          fi: fi, hi: hi, ff: ff, hf: hf, hServ: hServ, htray: htray, hTot: hTot, trayKm: null,
+          custodios: c2raw ? c1raw + ' / ' + c2raw : c1raw || '—',
+          c1: c1raw, e1: e1raw, c2: c2raw, e2: e2raw,
+          recarga1: 0, recarga2: 0, v1: v1Final, v2: v2Final,
+          total: v1Final + (c2raw ? v2Final : 0), incomplete: incomplete
+        });
+        importados++;
+      });
+      save(); updateStats(); renderTable(); renderGroup();
+      var pendientes = records.filter(function(r) { return r.incomplete; }).length;
+      var msgs = ['✅ ' + importados + ' registro(s) importado(s)'];
+      if (pendientes > 0) msgs.push('⚠️ ' + pendientes + ' con campos pendientes — edita con ✏️');
+      toast(msgs.join(' · '), 4000);
+    } catch(err) {
+      toast('❌ Error al leer el archivo: ' + err.message, 5000);
+    }
+  };
+  reader.readAsBinaryString(file);
+  input.value = '';
+}
+
+// ─── IMPORTAR ASIG_MAY / BRIDGESTONE ─────────────────────────────────
+function importarAsig(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      var sheetNames = wb.SheetNames;
+      var importados = 0, omitidos = 0;
+
+      // ── Helpers ──────────────────────────────────────────────────────
+      var norm = function(s) { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); };
+
+      var fmtDate = function(v) {
+        if (!v) return '';
+        if (v instanceof Date) return v.toISOString().slice(0,10);
+        var s = String(v).trim();
+        var m = s.match(/(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : '';
+      };
+      var fmtTime = function(v) {
+        if (!v) return '';
+        if (v instanceof Date) { var h=v.getHours(),m=v.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
+        var s = String(v).trim();
+        var mt = s.match(/(\d{1,2}):(\d{2})/);
+        return mt ? (parseInt(mt[1])<10?'0':'')+parseInt(mt[1])+':'+mt[2] : '';
+      };
+      var fmtTimeFin = function(v) {
+        if (!v) return '';
+        if (v instanceof Date) { var h=v.getHours(),m=v.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
+        var s = String(v).trim();
+        var mt = s.match(/(\d{2}):(\d{2}):\d{2}/);
+        if (mt) return mt[1]+':'+mt[2];
+        var mt2 = s.match(/(\d{2}):(\d{2})/);
+        return mt2 ? mt2[1]+':'+mt2[2] : '';
+      };
+      var parseElem = function(s) {
+        s = String(s||'').trim();
+        if (!s) return {num:'', nom:''};
+        var m = s.match(/^(\d+)\s+(.+)$/);
+        return m ? {num:m[1], nom:m[2].trim()} : {num:'', nom:s};
+      };
+      var zonaAuto = function(serv, idCol, origen, destino) {
+        var s = String(serv||'').toUpperCase();
+        if (idCol==='SVF') return 'local';
+        if (s.includes('BISSU')||s.includes('PRYSMIAN')) return 'local';
+        if (s.includes('IN HOUSE')) return 'local';
+        var o=String(origen||'').toUpperCase(), d=String(destino||'').toUpperCase();
+        if (['MANZANILLO','LAREDO','COLIMA','FRONTER'].some(function(f){return o.includes(f)||d.includes(f);})) return 'fronteriza';
+        return 'nacional';
+      };
+      var SKIP_SERV = ['SUPERVISION','SUPERVISIÓN','CHOFER EJE','SUPERVISION'];
+      var esServicioValido = function(serv) {
+        if (!serv) return false;
+        var n = norm(serv);
+        return !SKIP_SERV.some(function(s){return n.includes(norm(s));});
+      };
+
+      // ── Detectar tipo de archivo ──────────────────────────────────────
+      // ASIG_MAY: hojas con nombre dd.mm.yy (ej "25.05.26")
+      // BRIDGESTONE: hojas "FORANEOS" e "IN HOUSE "
+      var esBridgestone = sheetNames.some(function(n){ return n.toUpperCase().includes('FORANEO') || n.toUpperCase().trim().includes('IN HOUSE'); });
+      var esAsigMay = sheetNames.some(function(n){ return /^\d{2}\.\d{2}\.\d{2}$/.test(n.trim()); });
+
+      // ── ASIG_MAY: leer hojas de días ─────────────────────────────────
+      if (esAsigMay) {
+        sheetNames.forEach(function(sname) {
+          if (!/^\d{2}\.\d{2}\.\d{2}$/.test(sname.trim())) return;
+          // Solo hojas del 25 al 31 de mayo (o todas si el usuario quiere importar todo)
+          var ws = wb.Sheets[sname];
+          var rawRows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+          if (rawRows.length < 3) return;
+
+          // Fila 0 = fecha del día
+          var fechaDia = '';
+          var celdaFecha = rawRows[0][0];
+          if (celdaFecha instanceof Date) fechaDia = celdaFecha.toISOString().slice(0,10);
+
+          // Fila 1 = encabezados: ESTATUS,ID,# CONS.,SERVICIO,ORIGEN,ESTADO,DESTINO,ESTADO,H. DE CITA,...,FINALIZA,...,ELEMENTO#1,ELEMENTO#2
+          // Col indices: 0=ESTATUS,1=ID,2=#CONS,3=SERVICIO,4=ORIGEN,5=ESTADO_O,6=DESTINO,7=ESTADO_D,
+          //              8=H.CITA,9=PRESENT,10=FINALIZA,11=UNIDAD,12=ELEM1,13=ELEM2
+          var dataRows = rawRows.slice(2);
+          dataRows.forEach(function(row) {
+            var estatus = String(row[0]||'').trim();
+            if (!estatus || estatus==='.' || estatus.toUpperCase().includes('CANCEL')) return;
+            var serv = String(row[3]||'').trim();
+            if (!esServicioValido(serv)) return;
+            var idCol = String(row[1]||'').trim();
+            var consRaw = String(row[2]||'').trim();
+            var cons = consRaw && !isNaN(parseFloat(consRaw)) ? String(parseInt(parseFloat(consRaw))) : consRaw;
+            var origen  = String(row[4]||'').trim();
+            var estadoO = String(row[5]||'').trim();
+            var destino = String(row[6]||'').trim();
+            var estadoD = String(row[7]||'').trim();
+            var hCita   = fmtTime(row[8]);
+            var finaliza= row[10];
+            var elem1   = parseElem(row[12]);
+            var elem2   = parseElem(row[13]);
+            var zona    = zonaAuto(serv, idCol, origen, destino);
+            var hServ   = null;
+            var fechaFin= fmtDate(finaliza);
+            var horaFin = fmtTimeFin(finaliza);
+            if (fechaDia && hCita && fechaFin && horaFin) {
+              hServ = diffHrs(fechaDia, hCita, fechaFin, horaFin);
+            }
+            var v1 = hServ!==null && zona ? sugerido(hServ,zona) : 0;
+            var v2 = (elem2.nom && hServ!==null && zona) ? sugerido(hServ,zona) : 0;
+            var horario = fechaDia && hCita ? fechaDia+' '+hCita+(fechaFin&&horaFin?' → '+fechaFin+' '+horaFin:'') : '—';
+            var custodios = elem2.nom ? elem1.nom+' / '+elem2.nom : elem1.nom || '—';
+            var incomplete = !origen||!destino||!elem1.nom||!fechaDia||!zona;
+            records.push({
+              id:seq++, cons:cons, servicio:serv, zona:zona,
+              base:estadoO, base2:estadoD, origen:origen, destino:destino,
+              horario:horario, fi:fechaDia, hi:hCita, ff:fechaFin, hf:horaFin,
+              hServ:hServ, htray:0, hTot:hServ, trayKm:null,
+              custodios:custodios, c1:elem1.nom, e1:elem1.num, c2:elem2.nom, e2:elem2.num,
+              recarga1:0, recarga2:0, v1:v1, v2:v2,
+              total:v1+(elem2.nom?v2:0), incomplete:incomplete
+            });
+            importados++;
+          });
+        });
+      }
+
+      // ── BRIDGESTONE: hojas FORANEOS e IN HOUSE ────────────────────────
+      if (esBridgestone) {
+        sheetNames.forEach(function(sname) {
+          var snorm = sname.toUpperCase().trim();
+          var esFOR = snorm.includes('FORANEO');
+          var esIH  = snorm.includes('IN HOUSE');
+          if (!esFOR && !esIH) return;
+          var ws = wb.Sheets[sname];
+          var rawRows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+          if (rawRows.length < 2) return;
+          // FORANEOS: 0=CONSECU,1=ID,2=#CONS,3=FECHA,4=H.CITA,5=EMBARQUE,6=VEHICULO,7=ELEM1,8=ELEM2,9=ORIGEN,10=ESTADO,11=DESTINO,12=ESTADO,13=H.PRESENT,14=FECHA_FIN
+          // IN HOUSE:  0=CONSECU,1=ID,2=#CONS,3=FECHA,4=CITA,5=UNIDAD,6=ELEM1,7=ELEM2,8=H.LLEGADA,9=ORIGEN,10=DESTINO,11=FECHA_FIN
+          var dataRows = rawRows.slice(1);
+          dataRows.forEach(function(row) {
+            var estatus = String(row[0]||'').trim();
+            if (estatus.toUpperCase().includes('CANCEL')) return;
+            var fechaV = row[3];
+            if (!(fechaV instanceof Date)) return;
+            var fechaDia = fechaV.toISOString().slice(0,10);
+            var consRaw = String(row[2]||'').trim();
+            var cons = consRaw && !isNaN(parseFloat(consRaw)) ? String(parseInt(parseFloat(consRaw))) : consRaw;
+            var hCita, elem1, elem2, origen, destino, finaliza, serv, zona, prefix;
+            if (esFOR) {
+              hCita   = fmtTime(row[4]);
+              elem1   = parseElem(row[7]);
+              elem2   = parseElem(row[8]);
+              origen  = String(row[9]||'').trim();
+              destino = String(row[11]||'').trim();
+              finaliza= row[14];
+              serv    = 'BRIDGESTONE FORANEO';
+              prefix  = 'BXC';
+              zona    = zonaAuto(serv,'',origen,destino);
+            } else {
+              hCita   = fmtTime(row[4]);
+              elem1   = parseElem(row[6]);
+              elem2   = parseElem(row[7]);
+              origen  = String(row[9]||'').trim();
+              destino = String(row[10]||'').trim();
+              finaliza= row[11];
+              serv    = 'BRIDGESTONE IN HOUSE';
+              prefix  = 'BXF';
+              zona    = 'local';
+            }
+            var fechaFin = fmtDate(finaliza);
+            var horaFin  = fmtTimeFin(finaliza);
+            var hServ = (fechaDia && hCita && fechaFin && horaFin) ? diffHrs(fechaDia,hCita,fechaFin,horaFin) : null;
+            var v1 = hServ!==null && zona ? sugerido(hServ,zona) : 0;
+            var v2 = (elem2.nom && hServ!==null && zona) ? sugerido(hServ,zona) : 0;
+            var fullCons = prefix+'-'+(cons||'?');
+            var horario = fechaDia&&hCita ? fechaDia+' '+hCita+(fechaFin&&horaFin?' → '+fechaFin+' '+horaFin:'') : '—';
+            var custodios = elem2.nom ? elem1.nom+' / '+elem2.nom : elem1.nom||'—';
+            var incomplete = !origen||!destino||!elem1.nom||!fechaDia;
+            records.push({
+              id:seq++, cons:fullCons, servicio:serv, zona:zona,
+              base:origen, base2:destino, origen:origen, destino:destino,
+              horario:horario, fi:fechaDia, hi:hCita, ff:fechaFin, hf:horaFin,
+              hServ:hServ, htray:0, hTot:hServ, trayKm:null,
+              custodios:custodios, c1:elem1.nom, e1:elem1.num, c2:elem2.nom, e2:elem2.num,
+              recarga1:0, recarga2:0, v1:v1, v2:v2,
+              total:v1+(elem2.nom?v2:0), incomplete:incomplete
+            });
+            importados++;
+          });
+        });
+      }
+
+      if (!esAsigMay && !esBridgestone) {
+        toast('⚠️ No reconozco el formato. Usa "Importar machote" para archivos del machote estándar.', 4000);
+        input.value=''; return;
+      }
+
+      save(); updateStats(); renderTable(); renderGroup();
+      var pendientes = records.filter(function(r){return r.incomplete;}).length;
+      var msgs = ['✅ '+importados+' registro(s) importado(s)'];
+      if (pendientes>0) msgs.push('⚠️ '+pendientes+' con campos pendientes — edita con ✏️');
+      toast(msgs.join(' · '), 5000);
+    } catch(err) {
+      toast('❌ Error: '+err.message, 5000);
+      console.error(err);
+    }
+  };
+  reader.readAsBinaryString(file);
+  input.value='';
+}
+
+// ─── EXPORTAR DISPERSIÓN (FORMATO MACHOTE) ────────────────────────────
+function exportarDispersion() {
+  if (!records.length) { toast('⚠️ No hay registros para exportar.'); return; }
+  var wb = XLSX.utils.book_new();
+
+  // Hoja 1: Carga Masiva — mismo formato que el machote de nómina
+  var headerRow = [
+    'Consecutivo','Servicio','Zona','Base salida','Base llegada',
+    'Origen','Destino','Fecha inicio','Hora inicio','Fecha fin','Hora fin',
+    'Custodio 1','N° Empleado 1','Custodio 2','N° Empleado 2',
+    'Viático 1 ($)','Viático 2 ($)'
+  ];
+  var dataRows = records.map(function(r) {
+    return [
+      r.cons, r.servicio, r.zona || '',
+      r.base, r.base2 || r.base,
+      r.origen, r.destino,
+      r.fi || '', r.hi || '', r.ff || '', r.hf || '',
+      r.c1 || r.custodios.split(' / ')[0] || '',
+      r.e1 || '',
+      r.c2 || (r.custodios.includes(' / ') ? r.custodios.split(' / ')[1] : '') || '',
+      r.e2 || '',
+      r.v1 || 0,
+      r.v2 || 0
+    ];
+  });
+  var ws = XLSX.utils.aoa_to_sheet([headerRow].concat(dataRows));
+  ws['!cols'] = [
+    {wch:12},{wch:24},{wch:12},{wch:28},{wch:28},
+    {wch:22},{wch:22},{wch:12},{wch:10},{wch:12},{wch:10},
+    {wch:35},{wch:14},{wch:35},{wch:14},{wch:14},{wch:14}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Carga Masiva');
+
+  // Hoja 2: Por custodio — una fila por persona, listo para dispersión
+  var filas = [];
+  records.forEach(function(r) {
+    filas.push({
+      'Consecutivo': r.cons, 'Servicio': r.servicio, 'Zona': r.zona || '',
+      'Origen': r.origen, 'Destino': r.destino, 'Horario': r.horario,
+      'Hrs totales': r.hTot != null ? +r.hTot.toFixed(2) : '',
+      'N° Empleado': r.e1 || '', 'Custodio': r.c1 || r.custodios.split(' / ')[0] || '',
+      'Viático ($)': r.v1 || 0, 'Recarga ($)': r.recarga1 || 0,
+      'Total a dispersar ($)': (r.v1 || 0) + (r.recarga1 || 0)
+    });
+    var c2name = r.c2 || (r.custodios.includes(' / ') ? r.custodios.split(' / ')[1] : '');
+    if (c2name) {
+      filas.push({
+        'Consecutivo': r.cons, 'Servicio': r.servicio, 'Zona': r.zona || '',
+        'Origen': r.origen, 'Destino': r.destino, 'Horario': r.horario,
+        'Hrs totales': r.hTot != null ? +r.hTot.toFixed(2) : '',
+        'N° Empleado': r.e2 || '', 'Custodio': c2name,
+        'Viático ($)': r.v2 || 0, 'Recarga ($)': r.recarga2 || 0,
+        'Total a dispersar ($)': (r.v2 || 0) + (r.recarga2 || 0)
+      });
+    }
+  });
+  var ws2 = XLSX.utils.json_to_sheet(filas);
+  ws2['!cols'] = [{wch:12},{wch:24},{wch:12},{wch:22},{wch:22},{wch:28},{wch:12},{wch:14},{wch:35},{wch:13},{wch:12},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Por custodio');
+
+  // Hoja 3: Catálogos
+  var catData = [
+    ['CAMPO','VALORES ACEPTADOS'],
+    ['Servicio','BRIDGESTONE FORANEO'],['','BRIDGESTONE IN HOUSE'],['','FAURECIA'],
+    ['','PAC INTERNATIONAL'],['','PILSAC'],['','ALSERA-SELOASA'],['','CARVAJAL EDUC.'],
+    ['','OXXO'],['','JAMES FARREL'],['','DISEÑOS LABOR'],['','SELDER'],['','PRYSMIAN'],['','BISSU'],['','Otro'],
+    ['Zona','nacional'],['','fronteriza'],['','local'],
+    ['Fecha (formato)','YYYY-MM-DD   ej: 2025-05-15'],
+    ['Hora (formato)','HH:MM         ej: 08:30'],
+    ['Consecutivo','Texto libre    ej: CV-001'],
+    ['Viático ($)','Solo número    ej: 100']
+  ];
+  var ws3 = XLSX.utils.aoa_to_sheet(catData);
+  ws3['!cols'] = [{wch:20},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Catálogos');
+
+  var fecha = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, 'dispersion_viaticos_' + fecha + '.xlsx');
+  toast('✅ Dispersión exportada — ' + filas.length + ' custodio(s)');
+}
+
+// ─── EXPORTAR COMPLETO ────────────────────────────────────────────────
+function exportarCompleto() {
+  if (!records.length) { toast('⚠️ No hay registros para exportar.'); return; }
+  var wb = XLSX.utils.book_new();
+  var det = [];
+  records.forEach(function(r) {
+    var base = {
+      'Consecutivo': r.cons, 'Servicio': r.servicio, 'Zona': r.zona || '',
+      'Base salida': r.base, 'Origen': r.origen, 'Destino': r.destino, 'Base llegada': r.base2 || r.base,
+      'Distancia total (km)': r.trayKm || '',
+      'Fecha inicio': r.fi || '', 'Hora inicio': r.hi || '',
+      'Fecha fin': r.ff || '', 'Hora fin': r.hf || '',
+      'Hrs servicio': r.hServ != null ? +r.hServ.toFixed(2) : '',
+      'Hrs trayecto': r.htray || 0,
+      'Hrs totales': r.hTot != null ? +r.hTot.toFixed(2) : ''
+    };
+    det.push(Object.assign({}, base, { 'N° Empleado': r.e1 || '', 'Custodio': r.c1 || r.custodios.split(' / ')[0], 'Viático ($)': r.v1 || 0, 'Recarga ($)': r.recarga1 || 0 }));
+    var c2name = r.c2 || (r.custodios.includes(' / ') ? r.custodios.split(' / ')[1] : '');
+    if (c2name) det.push(Object.assign({}, base, { 'N° Empleado': r.e2 || '', 'Custodio': c2name, 'Viático ($)': r.v2 || 0, 'Recarga ($)': r.recarga2 || 0 }));
+  });
+  var ws1 = XLSX.utils.json_to_sheet(det);
+  ws1['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:25},{wch:25},{wch:25},{wch:25},{wch:14},{wch:12},{wch:10},{wch:12},{wch:10},{wch:12},{wch:12},{wch:12},{wch:14},{wch:35},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Detalle completo');
+  var fecha = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, 'viaticos_completo_' + fecha + '.xlsx');
+  toast('✅ Archivo completo exportado — ' + det.length + ' fila(s)');
+}
+
+// ─── EXPORTAR POR ELEMENTO ────────────────────────────────────────────
+function exportarPorElemento() {
+  if (!records.length) { toast('⚠️ No hay registros para exportar.'); return; }
+  var wb = XLSX.utils.book_new();
+
+  // Recolectar todos los custodios únicos con sus registros
+  var elementos = {}; // nombre → { emp, servicios: [] }
+  records.forEach(function(r) {
+    var pares = [];
+    if (r.c1) pares.push({ nombre: r.c1, emp: r.e1 || '', viatico: r.v1 || 0, recarga: r.recarga1 || 0 });
+    var c2n = r.c2 || (r.custodios && r.custodios.includes(' / ') ? r.custodios.split(' / ')[1].trim() : '');
+    if (c2n) pares.push({ nombre: c2n, emp: r.e2 || '', viatico: r.v2 || 0, recarga: r.recarga2 || 0 });
+    pares.forEach(function(p) {
+      if (!p.nombre) return;
+      if (!elementos[p.nombre]) elementos[p.nombre] = { emp: p.emp, servicios: [] };
+      elementos[p.nombre].servicios.push({
+        cons: r.cons, servicio: r.servicio, zona: r.zona || '',
+        origen: r.origen || '', destino: r.destino || '',
+        fi: r.fi || '', hi: r.hi || '', ff: r.ff || '', hf: r.hf || '',
+        hTot: r.hTot != null ? +r.hTot.toFixed(2) : '',
+        viatico: p.viatico, recarga: p.recarga,
+        total: p.viatico + p.recarga
+      });
+    });
+  });
+
+  var nombresOrdenados = Object.keys(elementos).sort();
+  var hojas = 0;
+
+  nombresOrdenados.forEach(function(nombre) {
+    var el = elementos[nombre];
+    var servicios = el.servicios;
+
+    // Encabezado del elemento
+    var aoa = [];
+    aoa.push(['ELEMENTO:', nombre, '', 'N° Empleado:', el.emp || '—', '', 'Servicios:', servicios.length]);
+    aoa.push([]); // línea vacía
+
+    // Encabezados de columnas
+    aoa.push(['Consecutivo','Servicio','Zona','Origen','Destino','Fecha inicio','Hora inicio','Fecha fin','Hora fin','Hrs totales','Viático ($)','Recarga ($)','Total ($)']);
+
+    // Filas de servicios ordenadas por fecha
+    servicios.sort(function(a,b) { return (a.fi+a.hi) < (b.fi+b.hi) ? -1 : 1; });
+    servicios.forEach(function(s) {
+      aoa.push([s.cons, s.servicio, s.zona, s.origen, s.destino, s.fi, s.hi, s.ff, s.hf, s.hTot, s.viatico, s.recarga, s.total]);
+    });
+
+    // Fila de totales
+    var sumVia = servicios.reduce(function(a,s){ return a+s.viatico; }, 0);
+    var sumRec = servicios.reduce(function(a,s){ return a+s.recarga; }, 0);
+    var sumTot = servicios.reduce(function(a,s){ return a+s.total; }, 0);
+    aoa.push([]);
+    aoa.push(['', '', '', '', '', '', '', '', 'TOTAL:', '', sumVia, sumRec, sumTot]);
+
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:12},{wch:22},{wch:11},{wch:22},{wch:22},{wch:12},{wch:9},{wch:12},{wch:9},{wch:10},{wch:11},{wch:11},{wch:11}];
+
+    // Estilo negrita en encabezado de columnas (fila 3, índice 2)
+    var headerRow = 3; // fila aoa index 2 = fila Excel 3
+    ['A','B','C','D','E','F','G','H','I','J','K','L','M'].forEach(function(col) {
+      var cell = ws[col + headerRow];
+      if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'E8F0FE' } } };
+    });
+    // Negrita en fila de totales
+    var totRow = aoa.length;
+    var cell = ws['I' + totRow];
+    if (cell) cell.s = { font: { bold: true } };
+
+    // Nombre de hoja: apellido + nombre (máx 31 chars, sin chars inválidos)
+    var sheetName = nombre.replace(/[:\\\/\?\*\[\]]/g, '').slice(0, 31);
+    // Evitar nombres de hoja duplicados
+    var base = sheetName, idx = 2;
+    while (wb.SheetNames.indexOf(sheetName) >= 0) sheetName = base.slice(0, 28) + '_' + (idx++);
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    hojas++;
+  });
+
+  // Hoja resumen — todos los elementos con su total
+  var resumen = [['N° Empleado', 'Elemento', 'Servicios', 'Total viáticos ($)', 'Total recargas ($)', 'TOTAL A DISPERSAR ($)']];
+  nombresOrdenados.forEach(function(nombre) {
+    var el = elementos[nombre];
+    var sv = el.servicios.reduce(function(a,s){ return a+s.viatico; }, 0);
+    var sr = el.servicios.reduce(function(a,s){ return a+s.recarga; }, 0);
+    resumen.push([el.emp || '', nombre, el.servicios.length, sv, sr, sv+sr]);
+  });
+  // Fila gran total
+  resumen.push([]);
+  var gtVia = nombresOrdenados.reduce(function(a,n){ return a + elementos[n].servicios.reduce(function(b,s){ return b+s.viatico; },0); }, 0);
+  var gtRec = nombresOrdenados.reduce(function(a,n){ return a + elementos[n].servicios.reduce(function(b,s){ return b+s.recarga; },0); }, 0);
+  resumen.push(['', 'GRAN TOTAL', '', gtVia, gtRec, gtVia+gtRec]);
+
+  var wsRes = XLSX.utils.aoa_to_sheet(resumen);
+  wsRes['!cols'] = [{wch:13},{wch:35},{wch:10},{wch:18},{wch:18},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, wsRes, 'RESUMEN');
+
+  var fecha = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, 'viaticos_por_elemento_' + fecha + '.xlsx');
+  toast('✅ Exportado por elemento — ' + hojas + ' elemento(s)', 4000);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────
+updateStats(); renderTable(); renderGroup();
+
+// ─── CARGA MASIVA ────────────────────────────────────────────────────
+function abrirCargaMasiva() {
+  if (!records.length) { toast('⚠️ Primero importa o agrega registros.'); return; }
+  cmActualizarChips();
+  renderCargaMasivaPreview();
+  document.getElementById('cm-overlay').style.display = 'flex';
+}
+function cerrarCargaMasiva() {
+  document.getElementById('cm-overlay').style.display = 'none';
+}
+
+// ── Chips de ubicación ───────────────────────────────────────────────
+var cmChipsActivos = []; // lista de strings de coincidencia activos
+
+function cmActualizarChips() {
+  // Recolectar orígenes y destinos únicos de todos los registros
+  var lugares = {};
+  records.forEach(function(r) {
+    var o = (r.origen || '').trim().toUpperCase();
+    var d = (r.destino || '').trim().toUpperCase();
+    var s = (r.servicio || '').trim().toUpperCase();
+    if (o) lugares[o] = (lugares[o] || 0) + 1;
+    if (d) lugares[d] = (lugares[d] || 0) + 1;
+  });
+  // Ordenar por frecuencia
+  var sorted = Object.keys(lugares).sort(function(a,b){ return lugares[b]-lugares[a]; }).slice(0,30);
+  var wrap = document.getElementById('cm-chips-wrap');
+  wrap.innerHTML = sorted.map(function(loc) {
+    var activo = cmChipsActivos.indexOf(loc) >= 0;
+    return '<button type="button" class="cm-chip' + (activo?' cm-chip-on':'') + '" onclick="cmToggleChip(\'' + loc.replace(/'/g,"\\'") + '\')">' + loc + ' <span style="opacity:.6;font-size:10px">×' + lugares[loc] + '</span></button>';
+  }).join('');
+}
+
+function cmToggleChip(loc) {
+  var idx = cmChipsActivos.indexOf(loc);
+  if (idx >= 0) cmChipsActivos.splice(idx, 1);
+  else cmChipsActivos.push(loc);
+  cmActualizarChips();
+  renderCargaMasivaPreview();
+}
+
+function cmLimpiarChips() {
+  cmChipsActivos = [];
+  cmActualizarChips();
+  renderCargaMasivaPreview();
+}
+
+function cmGetAccion() {
+  return document.getElementById('cm-accion').value;
+}
+
+function cmRegistrosFiltrados() {
+  var filtro = document.getElementById('cm-filtro').value;
+  var busqTexto = (document.getElementById('cm-busq-texto').value || '').trim().toUpperCase();
+  
+  return records.filter(function(r) {
+    // Filtro por zona / estado
+    if (filtro === 'sin_viatico' && (r.v1 && r.v1 > 0)) return false;
+    if (filtro === 'incompletos' && !r.incomplete) return false;
+    if (filtro === 'nacional' && r.zona !== 'nacional') return false;
+    if (filtro === 'fronteriza' && r.zona !== 'fronteriza') return false;
+    if (filtro === 'local' && r.zona !== 'local') return false;
+
+    // Filtro por chips de ubicación (OR entre chips, registro debe coincidir con AL MENOS UNO)
+    if (cmChipsActivos.length > 0) {
+      var hayMatch = cmChipsActivos.some(function(chip) {
+        var o = (r.origen || '').toUpperCase();
+        var d = (r.destino || '').toUpperCase();
+        var b = (r.base || '').toUpperCase();
+        var b2 = (r.base2 || '').toUpperCase();
+        return o.includes(chip) || d.includes(chip) || b.includes(chip) || b2.includes(chip);
+      });
+      if (!hayMatch) return false;
+    }
+
+    // Filtro por texto libre
+    if (busqTexto) {
+      var hayada = [r.origen, r.destino, r.base, r.base2, r.cons, r.servicio, r.c1, r.c2]
+        .some(function(v) { return v && v.toUpperCase().includes(busqTexto); });
+      if (!hayada) return false;
+    }
+
+    return true;
+  });
+}
+
+function cmGetNuevaZona() {
+  var r = document.querySelector('input[name="cm-nueva-zona"]:checked');
+  return r ? r.value : 'nacional';
+}
+
+function cmCalcNuevos(r, accion, valorFijo, aplicar2) {
+  var nuevoV1 = r.v1, nuevoV2 = r.v2, nuevaZona = r.zona;
+  if (accion === 'sugerido' || accion === 'recalc_zona') {
+    var hCalc = (r.hTot != null) ? r.hTot : r.hServ;
+    nuevoV1 = (hCalc != null && r.zona) ? sugerido(hCalc, r.zona) : r.v1;
+    nuevoV2 = (r.c2 && hCalc != null && r.zona) ? sugerido(hCalc, r.zona) : r.v2;
+  } else if (accion === 'fijo') {
+    nuevoV1 = valorFijo;
+    nuevoV2 = (r.c2 && aplicar2) ? valorFijo : r.v2;
+  } else if (accion === 'cambiar_zona') {
+    nuevaZona = cmGetNuevaZona();
+    var hCalc2 = (r.hTot != null) ? r.hTot : r.hServ;
+    nuevoV1 = (hCalc2 != null) ? sugerido(hCalc2, nuevaZona) : r.v1;
+    nuevoV2 = (r.c2 && hCalc2 != null) ? sugerido(hCalc2, nuevaZona) : r.v2;
+  }
+  if (!aplicar2 && accion !== 'sugerido' && accion !== 'recalc_zona' && accion !== 'cambiar_zona') nuevoV2 = r.v2;
+  return { v1: nuevoV1, v2: nuevoV2, zona: nuevaZona };
+}
+
+function renderCargaMasivaPreview() {
+  var accion = cmGetAccion();
+  var regs = cmRegistrosFiltrados();
+  var valorFijo = parseFloat(document.getElementById('cm-valor-fijo').value) || 0;
+  var aplicar2 = document.getElementById('cm-aplicar-c2').checked;
+  var aplicarRecarga = document.getElementById('cm-recarga').checked;
+
+  document.getElementById('cm-count').textContent = regs.length + ' registro(s) seleccionados';
+
+  var totalNuevo = 0, cambios = 0;
+  var rowsHtml = regs.slice(0, 40).map(function(r) {
+    var nv = cmCalcNuevos(r, accion, valorFijo, aplicar2);
+    var recarga1 = aplicarRecarga ? 50 : (r.recarga1 || 0);
+    var recarga2 = (aplicarRecarga && r.c2) ? 50 : (r.recarga2 || 0);
+    var nuevoTotal = nv.v1 + (r.c2 ? nv.v2 : 0) + recarga1 + (r.c2 ? recarga2 : 0);
+    totalNuevo += nuevoTotal;
+    var cambio = nv.v1 !== r.v1 || nv.v2 !== r.v2;
+    if (cambio) cambios++;
+    var hFmt = (r.hTot != null) ? fmtHrs(r.hTot) : (r.hServ != null ? fmtHrs(r.hServ) : '—');
+    var rutaStr = [(r.origen||''), (r.destino||'')].filter(Boolean).join(' → ');
+    var zonaDisplay = nv.zona !== r.zona
+      ? '<span style="color:var(--muted);text-decoration:line-through;font-size:10px">' + (r.zona||'—') + '</span> <span style="color:var(--success);font-weight:700">→ ' + nv.zona + '</span>'
+      : (r.zona||'—');
+    return '<tr>' +
+      '<td style="font-weight:700;color:var(--accent);white-space:nowrap">' + r.cons + '</td>' +
+      '<td style="font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.c1||'—') + (r.c2?'<br><span style="color:var(--hint)">'+r.c2+'</span>':'') + '</td>' +
+      '<td style="font-size:10px;color:var(--hint);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + rutaStr + '</td>' +
+      '<td style="font-size:11px;text-align:center">' + zonaDisplay + '</td>' +
+      '<td style="text-align:center;font-size:12px">' + hFmt + '</td>' +
+      '<td style="text-align:right;font-size:12px;color:var(--muted)">' + (r.v1?'$'+r.v1:'—') + '</td>' +
+      '<td style="text-align:right;font-weight:700;color:' + (cambio?'var(--success)':'var(--text)') + '">' + (nv.v1?'$'+nv.v1:'—') + (cambio?' ✓':'') + '</td>' +
+      '<td style="text-align:right;font-weight:700">$' + nuevoTotal.toLocaleString() + '</td>' +
+      '</tr>';
+  }).join('');
+  if (regs.length > 40) rowsHtml += '<tr><td colspan="8" style="text-align:center;color:var(--hint);font-size:11px;padding:8px">… y ' + (regs.length-40) + ' más</td></tr>';
+  document.getElementById('cm-preview-tbody').innerHTML = rowsHtml || '<tr><td colspan="8" class="empty">Sin registros que coincidan con los filtros</td></tr>';
+  document.getElementById('cm-resumen-cambios').textContent = cambios + ' registro(s) con cambios';
+  document.getElementById('cm-resumen-total').textContent = '$' + totalNuevo.toLocaleString();
+}
+
+function aplicarCargaMasiva() {
+  var accion = cmGetAccion();
+  var regs = cmRegistrosFiltrados();
+  var valorFijo = parseFloat(document.getElementById('cm-valor-fijo').value) || 0;
+  var aplicar2 = document.getElementById('cm-aplicar-c2').checked;
+  var aplicarRecarga = document.getElementById('cm-recarga').checked;
+  if (!regs.length) { toast('⚠️ No hay registros que coincidan.'); return; }
+  var ids = regs.map(function(r) { return r.id; });
+  var cambios = 0;
+  records.forEach(function(r) {
+    if (!ids.includes(r.id)) return;
+    var nv = cmCalcNuevos(r, accion, valorFijo, aplicar2);
+    if (aplicarRecarga) { r.recarga1 = 50; if (r.c2) r.recarga2 = 50; }
+    if (nv.v1 !== r.v1 || nv.v2 !== r.v2 || nv.zona !== r.zona) cambios++;
+    r.v1 = nv.v1; r.v2 = nv.v2;
+    if (accion === 'cambiar_zona') r.zona = nv.zona;
+    r.total = r.v1 + (r.c2?r.v2:0) + (r.recarga1||0) + (r.c2?(r.recarga2||0):0);
+  });
+  save(); updateStats(); renderTable(); renderGroup();
+  cerrarCargaMasiva();
+  toast('✅ Carga masiva aplicada — ' + cambios + ' cambio(s) en ' + regs.length + ' registro(s)', 4000);
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('cm-overlay').style.display === 'flex') cerrarCargaMasiva();
+});
+
+function cmToggleValorFijo() {
+  var accion = document.getElementById('cm-accion').value;
+  document.getElementById('cm-valor-fijo-wrap').style.display = accion === 'fijo' ? 'block' : 'none';
+  document.getElementById('cm-cambiar-zona-wrap').style.display = accion === 'cambiar_zona' ? 'block' : 'none';
+  // Preselect nacional by default first time
+  if (accion === 'cambiar_zona' && !document.querySelector('input[name="cm-nueva-zona"]:checked')) {
+    document.querySelector('input[name="cm-nueva-zona"][value="nacional"]').checked = true;
+  }
+}
+
+// ─── FIREBASE — IMPORTAR DESDE OPSCONTROL ────────────────────────────
+var fbDatos = { servicios: [], bsServicios: [] };
+var fbSeleccionados = new Set();
+var fbTabActual = 'servicios';
+var fbListo = false;
+
+// Esperar a que Firebase esté listo
+window.addEventListener('fb-ready', function() {
+  fbListo = true;
+  var dot = document.getElementById('fb-dot');
+  var txt = document.getElementById('fb-status-txt');
+  if (dot) { dot.style.background = 'var(--green)'; }
+  if (txt) { txt.textContent = 'Conectado a Firebase ✓'; txt.style.color = 'var(--green)'; }
+});
+
+// Si no conecta en 5 seg, mostrar error
+setTimeout(function() {
+  if (!fbListo) {
+    var dot = document.getElementById('fb-dot');
+    var txt = document.getElementById('fb-status-txt');
+    if (dot) dot.style.background = 'var(--red)';
+    if (txt) { txt.textContent = 'Sin conexión'; txt.style.color = 'var(--red)'; }
+  }
+}, 5000);
+
+function fbFechaHoy() {
+  var hoy = new Date().toISOString().slice(0,10);
+  document.getElementById('fb-fecha-ini').value = hoy;
+  document.getElementById('fb-fecha-fin').value = hoy;
+}
+function fbFechaSemana() {
+  var hoy = new Date();
+  var lunes = new Date(hoy); lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
+  var domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+  document.getElementById('fb-fecha-ini').value = lunes.toISOString().slice(0,10);
+  document.getElementById('fb-fecha-fin').value = domingo.toISOString().slice(0,10);
+}
+function fbFechaMes() {
+  var hoy = new Date();
+  var ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  var fin = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0);
+  document.getElementById('fb-fecha-ini').value = ini.toISOString().slice(0,10);
+  document.getElementById('fb-fecha-fin').value = fin.toISOString().slice(0,10);
+}
+
+async function fbCargar() {
+  if (!window._fbReady) { toast('⚠️ Firebase aún no está conectado. Espera un momento.'); return; }
+  var fechaIni = document.getElementById('fb-fecha-ini').value;
+  var fechaFin = document.getElementById('fb-fecha-fin').value;
+  if (!fechaIni || !fechaFin) { toast('⚠️ Selecciona un rango de fechas.'); return; }
+
+  document.getElementById('fb-loading').style.display = 'block';
+  document.getElementById('fb-resultados').style.display = 'none';
+  document.getElementById('fb-empty').style.display = 'none';
+
+  try {
+    var docRef = window._fbDoc(window._fbDb, 'empresa', 'opscontrol');
+    var docSnap = await window._fbGet(docRef);
+
+    if (!docSnap.exists()) {
+      toast('❌ No se encontró el documento opscontrol en Firebase.', 5000);
+      document.getElementById('fb-loading').style.display = 'none';
+      return;
+    }
+
+    var data = docSnap.data();
+    var tipo = document.getElementById('fb-tipo').value;
+
+    // Filtrar por fecha
+    function filtrar(arr) {
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(function(s) {
+        var f = s.fecha || s.fechaSolicitud || '';
+        return f >= fechaIni && f <= fechaFin;
+      });
+    }
+
+    fbDatos.servicios   = (tipo === 'bsServicios') ? [] : filtrar(data.servicios || []);
+    fbDatos.bsServicios = (tipo === 'servicios')   ? [] : filtrar(data.bsServicios || []);
+    fbSeleccionados = new Set();
+
+    var total = fbDatos.servicios.length + fbDatos.bsServicios.length;
+    document.getElementById('fb-loading').style.display = 'none';
+
+    if (!total) {
+      document.getElementById('fb-empty').style.display = 'block';
+      toast('📭 Sin resultados para ese rango de fechas.', 3000);
+      return;
+    }
+
+    document.getElementById('fb-total-txt').textContent = total;
+    document.getElementById('fb-cnt-serv').textContent = fbDatos.servicios.length;
+    document.getElementById('fb-cnt-bs').textContent   = fbDatos.bsServicios.length;
+    document.getElementById('fb-resultados').style.display = 'block';
+
+    // Mostrar primera tab con datos
+    fbTabActual = fbDatos.servicios.length ? 'servicios' : 'bsServicios';
+    fbTab(fbTabActual);
+    toast('✅ ' + total + ' registros encontrados en Firebase', 3000);
+
+  } catch(err) {
+    document.getElementById('fb-loading').style.display = 'none';
+    toast('❌ Error al leer Firebase: ' + err.message, 6000);
+    console.error(err);
+  }
+}
+
+function fbTab(tab) {
+  fbTabActual = tab;
+  // Estilos tabs
+  var btnServ = document.getElementById('fb-tab-serv');
+  var btnBs   = document.getElementById('fb-tab-bs');
+  if (tab === 'servicios') {
+    btnServ.className = 'btn btn-sm btn-ghost';
+    btnBs.className   = 'btn btn-sm';
+    btnBs.style.borderColor = 'var(--border2)'; btnBs.style.color = 'var(--muted)';
+  } else {
+    btnBs.className   = 'btn btn-sm btn-ghost';
+    btnServ.className = 'btn btn-sm';
+    btnServ.style.borderColor = 'var(--border2)'; btnServ.style.color = 'var(--muted)';
+  }
+  fbRenderTabla();
+}
+
+function fbRenderTabla() {
+  var arr = fbDatos[fbTabActual] || [];
+  var tbody = document.getElementById('fb-tbody');
+  if (!arr.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Sin datos en esta categoría</td></tr>';
+    return;
+  }
+  tbody.innerHTML = arr.map(function(s, i) {
+    var key = fbTabActual + '_' + i;
+    var chk = fbSeleccionados.has(key);
+    var bg = i%2===0 ? '' : 'style="background:rgba(124,58,237,.03)"';
+    // Campos según tipo
+    var cons = s.consecutivo || s.id || '—';
+    var fecha = s.fecha || s.fechaSolicitud || '—';
+    var hora  = s.horaCita || s.hora || '—';
+    var elem  = s.elementoB || s.elemento || s.elementoConUnidad || '—';
+    var origen = s.origen || (s.origenEstado ? s.origenEstado+', '+s.origenMunicipio : '—');
+    var destino = s.destino || s.claveRuta || (s.destinoEstado ? s.destinoEstado+', '+s.destinoMunicipio : '—');
+    var estatus = s.estatus || '—';
+    var ecolor = estatus.includes('ASIGNADO') ? 'var(--green)' : estatus.includes('CANCEL') ? 'var(--red)' : 'var(--muted)';
+    return '<tr '+bg+'>' +
+      '<td style="padding:7px 10px"><input type="checkbox" '+(chk?'checked':'')+' onchange="fbToggle(\''+key+'\',this.checked)" style="accent-color:var(--p3);width:13px;height:13px"></td>' +
+      '<td style="font-weight:700;color:var(--p5);font-size:12px">'+cons+'</td>' +
+      '<td style="font-size:11px;color:var(--muted)">'+fecha+'</td>' +
+      '<td style="font-size:11px;color:var(--muted)">'+hora+'</td>' +
+      '<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+elem+'</td>' +
+      '<td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+origen+'</td>' +
+      '<td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+destino+'</td>' +
+      '<td style="font-size:10px;font-weight:600;color:'+ecolor+'">'+estatus+'</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function fbToggle(key, checked) {
+  if (checked) fbSeleccionados.add(key); else fbSeleccionados.delete(key);
+  document.getElementById('fb-sel-count').textContent = fbSeleccionados.size;
+}
+
+function fbSelTodo(checked) {
+  var arr = fbDatos[fbTabActual] || [];
+  arr.forEach(function(_, i) {
+    var key = fbTabActual + '_' + i;
+    if (checked) fbSeleccionados.add(key); else fbSeleccionados.delete(key);
+  });
+  document.getElementById('fb-sel-count').textContent = fbSeleccionados.size;
+  fbRenderTabla();
+}
+
+function fbImportar() {
+  if (!fbSeleccionados.size) { toast('⚠️ Selecciona al menos un registro.'); return; }
+
+  var importados = 0;
+  var SKIP = ['CANCELADO','CANCELA CLIENTE'];
+
+  function procesarServicio(s, tipo) {
+    var estatus = s.estatus || '';
+    if (SKIP.some(function(sk){ return estatus.toUpperCase().includes(sk); })) return;
+
+    var cons = s.consecutivo || s.id || ('FB-'+seq);
+    var fecha = s.fecha || s.fechaSolicitud || '';
+    var hora  = s.horaCita || s.hora || '';
+    var elem1 = s.elementoB || s.elemento || '';
+    var elem2 = s.elementoConUnidad || '';
+    var origen = s.origen || (s.origenEstado ? s.origenEstado+', '+s.origenMunicipio : '');
+    var destino = s.destino || s.claveRuta || (s.destinoEstado ? s.destinoEstado+', '+s.destinoMunicipio : '');
+    var servLabel = tipo === 'bsServicios' ? 'BRIDGESTONE FORANEO' : (s.cliente || s.servicio || 'Otro');
+    var zona = tipo === 'bsServicios' ? 'nacional' : 'nacional';
+
+    // Extraer número de empleado si viene en formato "1046 APELLIDO NOMBRE"
+    var e1num = '', e1nom = elem1;
+    var mE1 = elem1.match(/^(\d+)\s+(.+)$/);
+    if (mE1) { e1num = mE1[1]; e1nom = mE1[2]; }
+    var e2num = '', e2nom = elem2;
+    var mE2 = elem2.match(/^(\d+)\s+(.+)$/);
+    if (mE2) { e2num = mE2[1]; e2nom = mE2[2]; }
+
+    var horario = fecha && hora ? fecha+' '+hora : '—';
+    var incomplete = !origen || !destino || !e1nom || !fecha;
+
+    records.push({
+      id: seq++, cons: String(cons), servicio: servLabel, zona: zona,
+      base: '', base2: '', origen: origen, destino: destino,
+      horario: horario, fi: fecha, hi: hora, ff: '', hf: '',
+      hServ: null, htray: 0, hTot: null, trayKm: null,
+      custodios: e2nom ? e1nom+' / '+e2nom : e1nom || '—',
+      c1: e1nom, e1: e1num, c2: e2nom, e2: e2num,
+      recarga1: 0, recarga2: 0, v1: 0, v2: 0, total: 0,
+      incomplete: incomplete
+    });
+    importados++;
+  }
+
+  fbSeleccionados.forEach(function(key) {
+    var parts = key.split('_');
+    var tipo = parts[0];
+    var idx  = parseInt(parts[1]);
+    var arr  = fbDatos[tipo] || [];
+    if (arr[idx]) procesarServicio(arr[idx], tipo);
+  });
+
+  fbSeleccionados = new Set();
+  document.getElementById('fb-sel-count').textContent = '0';
+  save(); updateStats(); renderTable(); renderGroup(); renderRecent();
+
+  var pendientes = records.filter(function(r){ return r.incomplete; }).length;
+  registrarImportacion('OpsControl Firebase', 'ASIG_MAY', importados, pendientes);
+  toast('✅ '+importados+' registro(s) importados desde OpsControl — edita con ✏️ para completar viáticos', 5000);
+  navTo('pg-tabla','📋','Registros','Todos los servicios capturados');
+}
+
+// Render Firebase page when navigating to it
+var _origNavTo = navTo;
+navTo = function(pageId, icon, title, sub) {
+  _origNavTo(pageId, icon, title, sub);
+  if (pageId === 'pg-firebase') {
+    // Set default dates to this week
+    if (!document.getElementById('fb-fecha-ini').value) fbFechaSemana();
+  }
+};
+
+
+var historial = JSON.parse(localStorage.getItem('viaticos_historial') || '[]');
+
+function saveHistorial() {
+  localStorage.setItem('viaticos_historial', JSON.stringify(historial));
+}
+
+function registrarImportacion(nombreArchivo, tipo, importados, pendientes) {
+  historial.unshift({
+    id: Date.now(),
+    fecha: new Date().toLocaleString('es-MX'),
+    archivo: nombreArchivo,
+    tipo: tipo,
+    importados: importados,
+    pendientes: pendientes,
+    totalAntes: records.length - importados
+  });
+  // Guardar máximo 50 entradas
+  if (historial.length > 50) historial = historial.slice(0, 50);
+  saveHistorial();
+  renderHistorial();
+}
+
+function renderHistorial() {
+  var cont = document.getElementById('historial-lista');
+  if (!cont) return;
+  if (!historial.length) {
+    cont.innerHTML = '<div style="text-align:center;color:var(--hint);padding:32px;font-style:italic">Sin importaciones registradas aún</div>';
+    return;
+  }
+  cont.innerHTML = historial.map(function(h, i) {
+    var tipoBadge = h.tipo === 'ASIG_MAY' ? '<span style="background:rgba(34,211,238,.12);color:var(--cyan);border:1px solid rgba(34,211,238,.2);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">ASIG MAY</span>' :
+                   h.tipo === 'BRIDGESTONE' ? '<span style="background:rgba(167,139,250,.12);color:var(--p5);border:1px solid rgba(167,139,250,.2);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">BRIDGESTONE</span>' :
+                   h.tipo === 'MACHOTE' ? '<span style="background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.2);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">MACHOTE</span>' :
+                   '<span style="background:rgba(148,163,184,.08);color:#94a3b8;border:1px solid rgba(148,163,184,.15);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">OTRO</span>';
+    var bg = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
+    return '<div style="background:'+bg+';border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center">' +
+      '<div style="width:40px;height:40px;border-radius:10px;background:rgba(124,58,237,.12);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">' +
+        (h.tipo === 'BRIDGESTONE' ? '🟣' : h.tipo === 'ASIG_MAY' ? '🔵' : h.tipo === 'MACHOTE' ? '🟢' : '📄') +
+      '</div>' +
+      '<div>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">' +
+          '<span style="font-weight:700;font-size:13px;color:var(--text)">' + (h.archivo || 'Archivo') + '</span>' +
+          tipoBadge +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap">' +
+          '<span>📅 ' + h.fecha + '</span>' +
+          '<span>✅ ' + h.importados + ' registros importados</span>' +
+          (h.pendientes > 0 ? '<span style="color:var(--gold)">⚠️ ' + h.pendientes + ' pendientes</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0">' +
+        '<button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:rgba(248,113,113,.2);font-size:11px" onclick="eliminarHistorial('+h.id+')">✕</button>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function eliminarHistorial(id) {
+  historial = historial.filter(function(h) { return h.id !== id; });
+  saveHistorial();
+  renderHistorial();
+}
+
+function limpiarHistorial() {
+  if (!confirm('¿Limpiar todo el historial de importaciones?')) return;
+  historial = [];
+  saveHistorial();
+  renderHistorial();
+  toast('🗑️ Historial limpiado');
+}
+
+// ─── RESPALDO JSON ────────────────────────────────────────────────────
+function exportarRespaldo() {
+  if (!records.length) { toast('⚠️ No hay registros para respaldar.'); return; }
+  var respaldo = {
+    version: 'viaticos_v4',
+    fecha: new Date().toISOString(),
+    totalRegistros: records.length,
+    records: records,
+    historial: historial
+  };
+  var blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'respaldo_viaticos_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('💾 Respaldo guardado — ' + records.length + ' registros', 4000);
+}
+
+function importarRespaldo(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!data.records || !Array.isArray(data.records)) {
+        toast('❌ Archivo inválido — no es un respaldo de ViaticOS.', 5000);
+        input.value = ''; return;
+      }
+      var totalAntes = records.length;
+      // Merge: agregar solo los que no existan (por id)
+      var idsExistentes = records.map(function(r) { return r.id; });
+      var nuevos = data.records.filter(function(r) { return !idsExistentes.includes(r.id); });
+      var reemplazar = confirm(
+        'Se encontraron ' + data.records.length + ' registros en el respaldo.\n' +
+        '• ' + nuevos.length + ' son nuevos\n' +
+        '• ' + (data.records.length - nuevos.length) + ' ya existen\n\n' +
+        '¿Deseas REEMPLAZAR todo? (Cancelar = solo agregar los nuevos)'
+      );
+      if (reemplazar) {
+        records = data.records;
+      } else {
+        records = records.concat(nuevos);
+      }
+      seq = records.length ? Math.max.apply(null, records.map(function(r){ return r.id; })) + 1 : 1;
+      // Restaurar historial si existe
+      if (data.historial && Array.isArray(data.historial)) {
+        historial = data.historial;
+        saveHistorial();
+      }
+      save(); updateStats(); renderTable(); renderGroup(); renderRecent(); renderHistorial();
+      registrarImportacion(file.name, 'RESPALDO', reemplazar ? data.records.length : nuevos.length, 0);
+      toast('♻️ Respaldo restaurado — ' + records.length + ' registros en total', 5000);
+    } catch(err) {
+      toast('❌ Error al leer el respaldo: ' + err.message, 5000);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ─── PATCH: registrar en historial al importar ───────────────────────
+var _baseImportarExcel = importarExcel;
+importarExcel = function(input) {
+  var fileName = input.files[0] ? input.files[0].name : 'archivo';
+  var antes = records.length;
+  _baseImportarExcel(input);
+  // Registrar después de un tick para que records ya esté actualizado
+  setTimeout(function() {
+    var importados = records.length - antes;
+    if (importados > 0) {
+      var pendientes = records.filter(function(r){ return r.incomplete; }).length;
+      registrarImportacion(fileName, 'MACHOTE', importados, pendientes);
+    }
+  }, 500);
+};
+
+var _baseImportarAsig = importarAsig;
+importarAsig = function(input) {
+  var fileName = input.files[0] ? input.files[0].name : 'archivo';
+  var antes = records.length;
+  _baseImportarAsig(input);
+  setTimeout(function() {
+    var importados = records.length - antes;
+    if (importados > 0) {
+      var tipo = fileName.toUpperCase().includes('BRIDGE') ? 'BRIDGESTONE' : 'ASIG_MAY';
+      var pendientes = records.filter(function(r){ return r.incomplete; }).length;
+      registrarImportacion(fileName, tipo, importados, pendientes);
+    }
+  }, 500);
+};
+
+// ─── PATCH: updateStats también refresca dashboard ────────────────────
+var _baseUpdateStats = updateStats;
+updateStats = function() { _baseUpdateStats(); if(typeof renderRecent==='function') renderRecent(); };
+
+// ─── INIT ──────────────────────────────────────────────────────────────
+updateStats(); renderTable(); renderGroup(); renderRecent(); renderHistorial();
+</script>
+<!-- ══ MODAL VIÁTICOS SEMANALES ══════════════════════════════════════ -->
+<div class="modal-overlay" id="vs-overlay" style="display:none" onclick="if(event.target===this)cerrarViaticosSemanales()">
+<div class="modal" style="max-width:820px">
+  <h2>
+    <span>📅 Viáticos semanales</span>
+    <button class="modal-close" onclick="cerrarViaticosSemanales()">✕</button>
+  </h2>
+  <div style="background:rgba(124,58,237,.08);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--p5);margin-bottom:14px">
+    Define el período, asigna un monto por semana de entrada y agrega los elementos. El monto se suma al total de dispersión de cada elemento.
+  </div>
+  <!-- Período -->
+  <div class="g3" style="margin-bottom:12px">
+    <div><label>Nombre del período</label><input id="vs-periodo" type="text" placeholder="ej. Semana 22–28 mayo 2026"></div>
+    <div><label>Fecha inicio</label><input id="vs-fecha-ini" type="date"></div>
+    <div><label>Fecha fin</label><input id="vs-fecha-fin" type="date"></div>
+  </div>
+  <!-- Semanas -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="sep" style="margin:0;border:none;padding:0;font-size:10px;font-weight:700;color:var(--p4);text-transform:uppercase;letter-spacing:.1em">Montos por semana de entrada</div>
+    <button class="btn btn-sm btn-ghost" onclick="vsAgregarSemana('','')">+ Agregar semana</button>
+  </div>
+  <div id="vs-semanas-wrap" style="margin-bottom:14px"></div>
+  <!-- Elementos -->
+  <div class="sep">Elementos en este período</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end;margin-bottom:10px">
+    <div>
+      <label>Nombre del elemento</label>
+      <input id="vs-elem-nombre" type="text" placeholder="APELLIDO NOMBRE" oninput="this.value=this.value.toUpperCase();vsBuscarElem()">
+      <div id="vs-sug-lista" style="position:relative"></div>
+    </div>
+    <div><label>N° Empleado</label><input id="vs-elem-emp" type="text" placeholder="ej. 1046"></div>
+    <div>
+      <label>Semana de entrada</label>
+      <select id="vs-elem-semana" style="min-width:180px"><option value="">Seleccionar semana...</option></select>
+    </div>
+    <div><button class="btn btn-primary" style="height:38px;margin-top:18px" onclick="vsAgregarElemento()">+ Agregar</button></div>
+  </div>
+  <!-- Tabla de elementos -->
+  <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:14px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr>
+        <th style="padding:8px 10px;background:rgba(124,58,237,.06);font-size:10px;font-weight:700;color:var(--hint);text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left">N° Emp</th>
+        <th style="padding:8px 10px;background:rgba(124,58,237,.06);font-size:10px;font-weight:700;color:var(--hint);text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left">Elemento</th>
+        <th style="padding:8px 10px;background:rgba(124,58,237,.06);font-size:10px;font-weight:700;color:var(--hint);text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left">Semana entrada</th>
+        <th style="padding:8px 10px;background:rgba(124,58,237,.06);font-size:10px;font-weight:700;color:var(--hint);text-transform:uppercase;border-bottom:1px solid var(--border);text-align:right">Monto</th>
+        <th style="padding:8px 10px;background:rgba(124,58,237,.06);border-bottom:1px solid var(--border);width:40px"></th>
+      </tr></thead>
+      <tbody id="vs-elem-tbody">
+        <tr><td colspan="5" style="text-align:center;color:var(--hint);padding:16px;font-style:italic">Sin elementos — agrégalos arriba</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <!-- Footer -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;gap:14px;align-items:center">
+      <div class="total-box" style="min-width:140px">
+        <div class="lbl">Total del período</div>
+        <div class="val" id="vs-total-val" style="font-size:20px">$0</div>
+      </div>
+      <div style="font-size:12px;color:var(--muted)"><span id="vs-count">0</span> elemento(s)</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="cerrarViaticosSemanales()">Cancelar</button>
+      <button class="btn btn-cyan" onclick="vsExportar()">📥 Exportar período</button>
+      <button class="btn btn-primary" onclick="vsGuardar()">💾 Guardar y sumar al total</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══ MODAL BORRAR DATOS ═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="bd-overlay" style="display:none" onclick="if(event.target===this)cerrarBorrarDatos()">
+<div class="modal" style="max-width:520px">
+  <h2>
+    <span>🗑 Borrar datos</span>
+    <button class="modal-close" onclick="cerrarBorrarDatos()">✕</button>
+  </h2>
+  <div style="background:var(--red-bg);border:1px solid rgba(248,113,113,.25);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:16px">
+    ⚠️ Esta acción no se puede deshacer. Guarda un respaldo antes si lo necesitas.
+  </div>
+
+  <!-- Opciones de borrado -->
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
+
+    <!-- Por fecha -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text)">📅 Borrar por rango de fechas</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div><label>Desde</label><input id="bd-fecha-ini" type="date"></div>
+        <div><label>Hasta</label><input id="bd-fecha-fin" type="date"></div>
+        <button class="btn btn-danger btn-sm" style="height:36px" onclick="bdBorrarFechas()">Borrar</button>
+      </div>
+      <div id="bd-fecha-preview" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+    </div>
+
+    <!-- Por servicio -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text)">🏷 Borrar por tipo de servicio</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+        <div>
+          <label>Servicio</label>
+          <select id="bd-servicio">
+            <option value="">Seleccionar servicio...</option>
+            <option>BRIDGESTONE FORANEO</option><option>BRIDGESTONE IN HOUSE</option>
+            <option>FAURECIA</option><option>PAC INTERNATIONAL</option><option>PILSAC</option>
+            <option>ALSERA-SELOASA</option><option>CARVAJAL EDUC.</option><option>OXXO</option>
+            <option>JAMES FARREL</option><option>DISEÑOS LABOR</option><option>SELDER</option>
+            <option>PRYSMIAN</option><option>BISSU</option><option>Otro</option>
+          </select>
+        </div>
+        <button class="btn btn-danger btn-sm" style="height:36px" onclick="bdBorrarServicio()">Borrar</button>
+      </div>
+      <div id="bd-servicio-preview" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+    </div>
+
+    <!-- Por zona -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text)">🌍 Borrar por zona</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+        <div>
+          <label>Zona</label>
+          <select id="bd-zona">
+            <option value="">Seleccionar zona...</option>
+            <option value="nacional">Nacional</option>
+            <option value="fronteriza">Fronteriza</option>
+            <option value="local">Local</option>
+          </select>
+        </div>
+        <button class="btn btn-danger btn-sm" style="height:36px" onclick="bdBorrarZona()">Borrar</button>
+      </div>
+    </div>
+
+    <!-- Todo -->
+    <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2);border-radius:var(--r);padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--red)">💣 Borrar TODOS los registros</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Elimina absolutamente todo. Esta acción es irreversible.</div>
+      <button class="btn btn-danger" style="width:100%;font-size:13px;padding:10px" onclick="bdBorrarTodo()">🗑 Limpiar registro total</button>
+    </div>
+  </div>
+
+  <div style="text-align:right">
+    <button class="btn" onclick="cerrarBorrarDatos()">Cerrar</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ─── BORRAR DATOS ─────────────────────────────────────────────────────
+var bdSeleccionados = [];
+
+function abrirBorrarDatos() {
+  // Preview fechas en tiempo real
+  document.getElementById('bd-fecha-ini').oninput = bdPreviewFechas;
+  document.getElementById('bd-fecha-fin').oninput = bdPreviewFechas;
+  document.getElementById('bd-servicio').onchange = bdPreviewServicio;
+  bdPreviewFechas(); bdPreviewServicio();
+  document.getElementById('bd-overlay').style.display = 'flex';
+}
+
+function cerrarBorrarDatos() {
+  document.getElementById('bd-overlay').style.display = 'none';
+}
+
+function bdPreviewFechas() {
+  var ini = document.getElementById('bd-fecha-ini').value;
+  var fin = document.getElementById('bd-fecha-fin').value;
+  var prev = document.getElementById('bd-fecha-preview');
+  if (!ini && !fin) { prev.textContent = ''; return; }
+  var count = records.filter(function(r) {
+    if (ini && r.fi && r.fi < ini) return false;
+    if (fin && r.fi && r.fi > fin) return false;
+    return true;
+  }).length;
+  prev.textContent = count + ' registro(s) se eliminarán';
+  prev.style.color = count > 0 ? 'var(--red)' : 'var(--muted)';
+}
+
+function bdPreviewServicio() {
+  var serv = document.getElementById('bd-servicio').value;
+  var prev = document.getElementById('bd-servicio-preview');
+  if (!serv) { prev.textContent = ''; return; }
+  var count = records.filter(function(r){ return r.servicio === serv; }).length;
+  prev.textContent = count + ' registro(s) se eliminarán';
+  prev.style.color = count > 0 ? 'var(--red)' : 'var(--muted)';
+}
+
+function bdBorrarFechas() {
+  var ini = document.getElementById('bd-fecha-ini').value;
+  var fin = document.getElementById('bd-fecha-fin').value;
+  if (!ini && !fin) { toast('⚠️ Selecciona al menos una fecha.'); return; }
+  var antes = records.length;
+  records = records.filter(function(r) {
+    if (ini && r.fi && r.fi < ini) return true;
+    if (fin && r.fi && r.fi > fin) return true;
+    if (!r.fi) return true; // sin fecha, conservar
+    return false;
+  });
+  var eliminados = antes - records.length;
+  save(); updateStats(); renderTable(); renderGroup();
+  toast('🗑 ' + eliminados + ' registro(s) eliminados por fecha', 4000);
+  bdPreviewFechas();
+}
+
+function bdBorrarServicio() {
+  var serv = document.getElementById('bd-servicio').value;
+  if (!serv) { toast('⚠️ Selecciona un servicio.'); return; }
+  var antes = records.length;
+  records = records.filter(function(r){ return r.servicio !== serv; });
+  var eliminados = antes - records.length;
+  save(); updateStats(); renderTable(); renderGroup();
+  toast('🗑 ' + eliminados + ' registro(s) de "' + serv + '" eliminados', 4000);
+  bdPreviewServicio();
+}
+
+function bdBorrarZona() {
+  var zona = document.getElementById('bd-zona').value;
+  if (!zona) { toast('⚠️ Selecciona una zona.'); return; }
+  var antes = records.length;
+  records = records.filter(function(r){ return r.zona !== zona; });
+  var eliminados = antes - records.length;
+  save(); updateStats(); renderTable(); renderGroup();
+  toast('🗑 ' + eliminados + ' registro(s) de zona "' + zona + '" eliminados', 4000);
+}
+
+function bdBorrarTodo() {
+  if (!confirm('¿Estás seguro de que quieres eliminar TODOS los ' + records.length + ' registros?\n\nEsta acción no se puede deshacer.')) return;
+  records = [];
+  seq = 1;
+  save(); updateStats(); renderTable(); renderGroup(); renderRecent();
+  cerrarBorrarDatos();
+  toast('🗑 Todos los registros eliminados', 4000);
+}
+
+function borrarSeleccionados() {
+  if (!bdSeleccionados.length) return;
+  var antes = records.length;
+  records = records.filter(function(r){ return !bdSeleccionados.includes(r.id); });
+  bdSeleccionados = [];
+  document.getElementById('btn-borrar-sel').style.display = 'none';
+  save(); updateStats(); renderTable(); renderGroup();
+  toast('🗑 ' + (antes - records.length) + ' registro(s) eliminados', 3000);
+}
+</script>
+
+</body>
+</html>
