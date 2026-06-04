@@ -10,7 +10,7 @@
 <!-- Firebase -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
   import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const firebaseConfig = {
@@ -30,6 +30,8 @@
   window._fbDb   = db;
   window._fbDoc  = doc;
   window._fbGet  = getDoc;
+  window._fbSet  = setDoc;
+  window._fbCurrentUser = null;
   window._fbAuth = auth;
   window._fbSignIn = signInAnonymously;
   window._fbReady = true;
@@ -48,14 +50,37 @@
         await signOut(auth);
         return;
       }
+      // Guardar referencia global al usuario
+      window._fbCurrentUser = user;
       // Usuario con email autenticado → mostrar app, ocultar login
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app-root').style.display = 'flex';
       // Mostrar email en topbar
       const el = document.getElementById('topbar-user-email');
       if (el) el.textContent = user.email;
+      // Cargar datos del usuario desde Firestore
+      try {
+        const snap = await getDoc(doc(db, 'usuarios', user.uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.records) {
+            window._recordsFromFirestore = data.records;
+          }
+          if (data.seq) {
+            window._seqFromFirestore = data.seq;
+          }
+          if (data.vs_periodos) {
+            window._vsPeriodosFromFirestore = data.vs_periodos;
+          }
+        }
+      } catch(e) {
+        console.warn('No se pudo cargar desde Firestore:', e);
+      }
+      // Disparar evento para que la app sepa que puede inicializarse
+      window.dispatchEvent(new Event('user-ready'));
     } else {
       // No autenticado → mostrar login, ocultar app
+      window._fbCurrentUser = null;
       document.getElementById('login-screen').style.display = 'flex';
       document.getElementById('app-root').style.display = 'none';
     }
@@ -1176,7 +1201,22 @@ var vsPeriodos = JSON.parse(localStorage.getItem('vs_periodos') || '[]');
 var vsSemanas = [];
 var vsElementos = [];
 
-function vsSaveP() { localStorage.setItem('vs_periodos', JSON.stringify(vsPeriodos)); }
+function vsSaveP() {
+  localStorage.setItem('vs_periodos', JSON.stringify(vsPeriodos));
+  if (window._fbCurrentUser && window._fbDb && window._fbDoc && window._fbSet) {
+    var uid = window._fbCurrentUser.uid;
+    var docRef = window._fbDoc(window._fbDb, 'usuarios', uid);
+    window._fbSet(docRef, { vs_periodos: vsPeriodos }, { merge: true })
+      .catch(function(e) { console.warn('Error guardando periodos en Firestore:', e); });
+  }
+}
+// Cargar vsPeriodos desde Firestore al hacer login
+window.addEventListener('user-ready', function() {
+  if (window._recordsFromFirestore && window._recordsFromFirestore._vs_periodos) {
+    vsPeriodos = window._recordsFromFirestore._vs_periodos;
+    localStorage.setItem('vs_periodos', JSON.stringify(vsPeriodos));
+  }
+});
 
 function abrirViaticosSemanales() {
   vsSemanas = []; vsElementos = [];
@@ -1362,8 +1402,21 @@ function vsExportar() {
 
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────
-let records = JSON.parse(localStorage.getItem('viaticos_v4') || '[]');
-let seq = records.length ? Math.max(...records.map(r => r.id)) + 1 : 1;
+// Usar datos de Firestore si ya fueron cargados por onAuthStateChanged, si no localStorage como respaldo
+let records = (window._recordsFromFirestore) ? window._recordsFromFirestore : JSON.parse(localStorage.getItem('viaticos_v4') || '[]');
+let seq = (window._seqFromFirestore) ? window._seqFromFirestore : (records.length ? Math.max(...records.map(r => r.id)) + 1 : 1);
+// Escuchar cuando el usuario se autentica para recargar datos de Firestore
+window.addEventListener('user-ready', function() {
+  if (window._recordsFromFirestore) {
+    records = window._recordsFromFirestore;
+    seq = window._seqFromFirestore || (records.length ? Math.max(...records.map(r => r.id)) + 1 : 1);
+    localStorage.setItem('viaticos_v4', JSON.stringify(records));
+    if (typeof updateStats === 'function') updateStats();
+    if (typeof renderTable === 'function') renderTable();
+    if (typeof renderGroup === 'function') renderGroup();
+    if (typeof renderRecent === 'function') renderRecent();
+  }
+});
 let mapObj = null, routeLayers = [];
 let currentTrayHrs = null, currentTrayKm = null;
 let timers = { base: null, orig: null, dest: null, base2: null };
@@ -1387,7 +1440,17 @@ function toast(msg, duration) {
 }
 
 // ─── PERSISTENCIA ─────────────────────────────────────────────────────
-function save() { localStorage.setItem('viaticos_v4', JSON.stringify(records)); }
+function save() {
+  // Guardar siempre en localStorage como caché
+  localStorage.setItem('viaticos_v4', JSON.stringify(records));
+  // Guardar en Firestore si hay usuario autenticado
+  if (window._fbCurrentUser && window._fbDb && window._fbDoc && window._fbSet) {
+    var uid = window._fbCurrentUser.uid;
+    var docRef = window._fbDoc(window._fbDb, 'usuarios', uid);
+    window._fbSet(docRef, { records: records, seq: seq, updatedAt: new Date().toISOString() })
+      .catch(function(e) { console.warn('Error guardando en Firestore:', e); });
+  }
+}
 
 // ─── GEOCODIFICACIÓN ──────────────────────────────────────────────────
 function esc(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
