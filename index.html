@@ -10,7 +10,7 @@
 <!-- Firebase -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
   import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const firebaseConfig = {
@@ -31,6 +31,7 @@
   window._fbDoc  = doc;
   window._fbGet  = getDoc;
   window._fbSet  = setDoc;
+  window._fbOnSnapshot = onSnapshot;
   window._fbCurrentUser = null;
   window._fbAuth = auth;
   window._fbSignIn = signInAnonymously;
@@ -58,9 +59,9 @@
       // Mostrar email en topbar
       const el = document.getElementById('topbar-user-email');
       if (el) el.textContent = user.email;
-      // Cargar datos del usuario desde Firestore
+      // Cargar datos del documento COMPARTIDO desde Firestore
       try {
-        const snap = await getDoc(doc(db, 'usuarios', user.uid));
+        const snap = await getDoc(doc(db, 'compartido', 'registros'));
         if (snap.exists()) {
           const data = snap.data();
           if (data.records) {
@@ -75,6 +76,27 @@
         }
       } catch(e) {
         console.warn('No se pudo cargar desde Firestore:', e);
+      }
+      // Escuchar cambios en tiempo real del documento compartido
+      if (window._fbOnSnapshot) {
+        const sharedRef = doc(db, 'compartido', 'registros');
+        window._fbOnSnapshot(sharedRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            window._recordsFromFirestore = data.records || [];
+            window._seqFromFirestore = data.seq || 1;
+            // Si la app ya está lista, actualizar pantalla automáticamente
+            if (window._appDomReady) {
+              records = window._recordsFromFirestore;
+              seq = window._seqFromFirestore;
+              localStorage.setItem('viaticos_v4', JSON.stringify(records));
+              if (typeof updateStats === 'function') updateStats();
+              if (typeof renderTable === 'function') renderTable();
+              if (typeof renderGroup === 'function') renderGroup();
+              if (typeof renderRecent === 'function') renderRecent();
+            }
+          }
+        });
       }
       // Disparar evento para que la app sepa que puede inicializarse
       window.dispatchEvent(new Event('user-ready'));
@@ -1206,9 +1228,8 @@ var vsElementos = [];
 
 function vsSaveP() {
   localStorage.setItem('vs_periodos', JSON.stringify(vsPeriodos));
-  if (window._fbCurrentUser && window._fbDb && window._fbDoc && window._fbSet) {
-    var uid = window._fbCurrentUser.uid;
-    var docRef = window._fbDoc(window._fbDb, 'usuarios', uid);
+  if (window._fbDb && window._fbDoc && window._fbSet) {
+    var docRef = window._fbDoc(window._fbDb, 'compartido', 'registros');
     window._fbSet(docRef, { vs_periodos: vsPeriodos }, { merge: true })
       .catch(function(e) { console.warn('Error guardando periodos en Firestore:', e); });
   }
@@ -1458,10 +1479,9 @@ function toast(msg, duration) {
 function save() {
   // Guardar siempre en localStorage como caché
   localStorage.setItem('viaticos_v4', JSON.stringify(records));
-  // Guardar en Firestore si hay usuario autenticado
-  if (window._fbCurrentUser && window._fbDb && window._fbDoc && window._fbSet) {
-    var uid = window._fbCurrentUser.uid;
-    var docRef = window._fbDoc(window._fbDb, 'usuarios', uid);
+  // Guardar en documento COMPARTIDO (todos los usuarios ven lo mismo)
+  if (window._fbDb && window._fbDoc && window._fbSet) {
+    var docRef = window._fbDoc(window._fbDb, 'compartido', 'registros');
     window._fbSet(docRef, { records: records, seq: seq, updatedAt: new Date().toISOString() })
       .catch(function(e) { console.warn('Error guardando en Firestore:', e); });
   }
@@ -3392,8 +3412,7 @@ async function sincronizarAhora() {
   }
   toast('☁️ Subiendo ' + records.length + ' registros...', 3000);
   try {
-    var uid = window._fbCurrentUser.uid;
-    var docRef = window._fbDoc(window._fbDb, 'usuarios', uid);
+    var docRef = window._fbDoc(window._fbDb, 'compartido', 'registros');
     await window._fbSet(docRef, {
       records: records,
       seq: seq,
