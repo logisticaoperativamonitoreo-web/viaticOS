@@ -884,7 +884,7 @@ function viewServicios(){
   var enPeriodo=DB.servicios.filter(function(s){return inPeriod(s.fecha);});
   var totalServ=DB.servicios.length;
   var listRows=enPeriodo.slice().reverse().map(servicioRow).join('')
-    || '<tr><td colspan="7" class="empty">Sin servicios en el periodo seleccionado</td></tr>';
+    || '<tr><td colspan="8" class="empty">Sin servicios en el periodo seleccionado</td></tr>';
   var otrosMeses={};
   DB.servicios.forEach(function(s){ if(!inPeriod(s.fecha)){ var mk=(s.fecha||'').slice(0,7)||'sin fecha'; otrosMeses[mk]=(otrosMeses[mk]||0)+1; } });
   var avisoOtros='';
@@ -960,14 +960,21 @@ function viewServicios(){
   +   '<span class="legend">'+TIPOS.map(function(tp){return '<span><span class="dot" style="background:'+tp.color+'"></span>'+esc(tp.key)+'</span>';}).join('')+'</span></div>'
   +   avisoOtros
   +   '<input class="inp" id="svc-search" placeholder="🔍 Buscar por consecutivo, cliente, ruta…" oninput="filtrarTablaServicios()" style="margin:12px 0 8px;max-width:420px">'
-  +   '<div class="tbl-wrap" style="margin-top:4px"><table id="svc-table"><thead><tr><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Horas</th><th>Zona</th><th class="right">Importe</th><th class="right">Acciones</th></tr></thead><tbody id="svc-tbody">'+listRows+'</tbody></table></div></div>';
+  +   '<div id="svc-bulkbar" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 10px;padding:10px 14px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r)">'
+  +     '<b id="svc-selcount">0 seleccionados</b><div class="grow"></div>'
+  +     '<button class="btn btn-sm btn-accent" onclick="abrirEdicionMultiple()">Editar seleccionados</button>'
+  +     '<button class="btn btn-sm btn-danger" onclick="eliminarServiciosSel()">Eliminar seleccionados</button>'
+  +     '<button class="btn btn-sm" onclick="limpiarSelServicios()">Quitar selección</button>'
+  +   '</div>'
+  +   '<div id="svc-bulkedit"></div>'
+  +   '<div class="tbl-wrap" style="margin-top:4px"><table id="svc-table"><thead><tr><th style="width:34px;text-align:center"><input type="checkbox" id="svc-checkall" onchange="toggleAllServicios(this.checked)" title="Seleccionar todos"></th><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Horas</th><th>Zona</th><th class="right">Importe</th><th class="right">Acciones</th></tr></thead><tbody id="svc-tbody">'+listRows+'</tbody></table></div></div>';
 }
 function servicioRow(s){
   var c=calcularServicio(s); var ti=tipoInfo(s.tipo);
   var cd = s.concepto==='casa_descanso' ? ' <span class="pill warn">Casa</span>':'';
   var falta = (s.importeManual==null) && (c.horasTotal==null);
   var pend = falta ? ' <span class="pill warn">Completar</span>' : '';
-  return '<tr><td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span>'+cd+pend+'</td>'
+  return '<tr><td style="text-align:center"><input type="checkbox" class="svc-chk" value="'+esc(s.id)+'" onchange="actualizarBarraSelServicios()"></td><td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span>'+cd+pend+'</td>'
     +'<td>'+esc(clienteNombre(s.clienteId))+'</td>'
     +'<td class="small">'+esc(s.origen||'—')+' → '+esc(s.destino||'—')+'</td>'
     +'<td class="small">'+(c.horasTotal!=null?c.horasTotal.toFixed(1)+' h':'—')+'</td>'
@@ -1052,6 +1059,94 @@ function fillServicioForm(s){
   document.querySelectorAll('#s-custodios input').forEach(function(i){ var on=(s.custodios||[]).indexOf(i.value)>=0; i.checked=on; var w=i.closest('.cust-opt'); if(w) w.classList.toggle('on',on); });
 }
 function delServicio(id){ if(!confirm('¿Borrar este servicio?'))return; DB.servicios=DB.servicios.filter(function(s){return s.id!==id;}); if(editingServId===id) editingServId=null; persist(); render(); }
+
+/* ---- Selección múltiple de servicios (editar / eliminar en lote) ---- */
+function serviciosSeleccionados(){
+  return Array.prototype.slice.call(document.querySelectorAll('.svc-chk:checked')).map(function(i){return i.value;});
+}
+function toggleAllServicios(on){
+  document.querySelectorAll('#svc-tbody tr').forEach(function(tr){
+    if(tr.style.display==='none') return; // sólo filas visibles según el filtro
+    var chk=tr.querySelector('.svc-chk'); if(chk) chk.checked=on;
+  });
+  actualizarBarraSelServicios();
+}
+function actualizarBarraSelServicios(){
+  var ids=serviciosSeleccionados();
+  var lbl=document.getElementById('svc-selcount');
+  if(lbl) lbl.textContent=ids.length+' seleccionado'+(ids.length===1?'':'s');
+  var bar=document.getElementById('svc-bulkbar');
+  if(bar) bar.style.display=ids.length?'flex':'none';
+  var all=document.getElementById('svc-checkall');
+  if(all){
+    var vis=Array.prototype.slice.call(document.querySelectorAll('#svc-tbody tr'))
+      .filter(function(tr){return tr.style.display!=='none' && tr.querySelector('.svc-chk');});
+    var marc=vis.filter(function(tr){return tr.querySelector('.svc-chk').checked;});
+    all.checked = vis.length>0 && marc.length===vis.length;
+    all.indeterminate = marc.length>0 && marc.length<vis.length;
+  }
+}
+function limpiarSelServicios(){
+  document.querySelectorAll('.svc-chk').forEach(function(i){i.checked=false;});
+  cerrarEdicionMultiple();
+  actualizarBarraSelServicios();
+}
+function eliminarServiciosSel(){
+  var ids=serviciosSeleccionados();
+  if(!ids.length){ toast('No hay servicios seleccionados'); return; }
+  if(!confirm('¿Borrar '+ids.length+' servicio(s) seleccionado(s)?\nEsta acción no se puede deshacer.')) return;
+  DB.servicios=DB.servicios.filter(function(s){return ids.indexOf(s.id)<0;});
+  if(ids.indexOf(editingServId)>=0) editingServId=null;
+  persist(); toast(ids.length+' servicio(s) eliminado(s)'); render();
+}
+function cerrarEdicionMultiple(){ var b=document.getElementById('svc-bulkedit'); if(b) b.innerHTML=''; }
+function abrirEdicionMultiple(){
+  var ids=serviciosSeleccionados();
+  if(!ids.length){ toast('No hay servicios seleccionados'); return; }
+  var box=document.getElementById('svc-bulkedit'); if(!box) return;
+  var clientesOpt=DB.clientes.filter(function(c){return !c.baja;}).map(function(c){return {v:c.id,l:c.nombre};});
+  function fila(k,label,markup){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">'
+      +'<label style="display:flex;align-items:center;gap:6px;min-width:200px;font-weight:600">'
+      +'<input type="checkbox" class="bulk-en" data-k="'+k+'" onchange="var s=document.getElementById(\'bulk-'+k+'\');if(s)s.disabled=!this.checked"> '+label+'</label>'
+      +'<div style="flex:1;min-width:180px">'+markup+'</div></div>';
+  }
+  box.innerHTML='<div class="card" style="border:1px solid var(--accent);background:var(--accent-soft);margin:8px 0">'
+    +'<div class="card-h"><h2>Editar '+ids.length+' servicio(s)</h2><div class="grow"></div>'
+    +'<button class="btn btn-sm" onclick="cerrarEdicionMultiple()">Cerrar</button></div>'
+    +'<p class="muted small">Marca sólo los campos que quieras cambiar. Los campos sin marcar se conservan tal como están en cada servicio.</p>'
+    +fila('estatusPago','Estatus de pago', selectHTML('bulk-estatusPago',[{v:'pendiente',l:'Pendiente'},{v:'pagado',l:'Pagado'}],''))
+    +fila('clienteId','Cliente', selectHTML('bulk-clienteId',clientesOpt,''))
+    +fila('tipo','Tipo de servicio', selectHTML('bulk-tipo',TIPOS.map(function(t){return {v:t.key,l:t.label};}),''))
+    +fila('concepto','Concepto', selectHTML('bulk-concepto',[{v:'operativo',l:'Gasto operativo de servicio'},{v:'casa_descanso',l:'Viático Casa de Descanso (Querétaro)'}],''))
+    +fila('zona','Zona', selectHTML('bulk-zona',[{v:'nacional',l:'Nacional'},{v:'fronteriza',l:'Fronteriza'},{v:'local',l:'Local / exento'}],''))
+    +fila('base','Base de salida', selectHTML('bulk-base',BASES_SALIDA,''))
+    +'<div style="margin-top:14px;display:flex;gap:10px">'
+    +'<button class="btn btn-primary" onclick="aplicarEdicionMultiple()">Aplicar cambios</button>'
+    +'<button class="btn" onclick="cerrarEdicionMultiple()">Cancelar</button></div></div>';
+  box.querySelectorAll('select[id^="bulk-"]').forEach(function(s){ s.disabled=true; });
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function aplicarEdicionMultiple(){
+  var ids=serviciosSeleccionados();
+  if(!ids.length){ toast('No hay servicios seleccionados'); return; }
+  var cambios={};
+  document.querySelectorAll('.bulk-en:checked').forEach(function(chk){
+    var k=chk.getAttribute('data-k');
+    var sel=document.getElementById('bulk-'+k);
+    if(sel && sel.value!=='') cambios[k]=sel.value;
+  });
+  var keys=Object.keys(cambios);
+  if(!keys.length){ toast('Marca al menos un campo y elige un valor para aplicar'); return; }
+  var n=0;
+  DB.servicios.forEach(function(s){
+    if(ids.indexOf(s.id)<0) return;
+    keys.forEach(function(k){ s[k]=cambios[k]; });
+    stamp(s,false); n++;
+  });
+  persist(); cerrarEdicionMultiple();
+  toast('Se actualizaron '+n+' servicio(s)'); render();
+}
 function verAuditoria(id){
   var s=DB.servicios.find(function(x){return x.id===id;}); if(!s)return;
   alert('AUDITORÍA\\n\\nConsecutivo: '+s.cons+'\\nCreado por: '+(s.createdBy||'—')+'\\nFecha creación: '+(s.createdAt||'—')+'\\nÚltima modificación: '+(s.updatedAt||'—')+'\\nModificado por: '+(s.updatedBy||'—'));
@@ -1066,6 +1161,7 @@ function filtrarTablaServicios(){
     var txt=tr.textContent.toLowerCase();
     tr.style.display=txt.indexOf(q)>=0?'':'none';
   });
+  actualizarBarraSelServicios();
 }
 function filtrarCustodios(){
   var qel=document.getElementById('s-cust-search'); if(!qel) return;
