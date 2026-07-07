@@ -1657,6 +1657,8 @@ function mapEstado(v){
   return String(v).trim();
 }
 function parseCust(txt){ var m=String(txt==null?'':txt).trim().match(/^(\d+)\s*(.*)$/); if(m&&m[2]) return {num:m[1],nom:m[2].trim().toUpperCase()}; return {num:'',nom:String(txt==null?'':txt).trim().toUpperCase()}; }
+// Una misma celda puede traer varios custodios separados por salto de línea, "/", "|" o ";"
+function splitCustCell(raw){ return String(raw==null?'':raw).split(/\r?\n|\s*[\/|;]\s*/).map(function(x){return x.trim();}).filter(Boolean); }
 
 // Detecta encabezados y construye el mapa de columnas de la hoja de servicios
 function mapearColumnasServicios(aoa){
@@ -1680,7 +1682,7 @@ function mapearColumnasServicios(aoa){
     else if(has(h,'cita') && idx.cita==null) idx.cita=i;
     else if(has(h,'present') && idx.present==null) idx.present=i;
     else if(has(h,'finaliza') && idx.finaliza==null) idx.finaliza=i;
-    else if((has(h,'clave')||has(h,'nombre')||has(h,'elemento')||has(h,'custodio')) && idx.clave==null) idx.clave=i;
+    else if(has(h,'clave')||has(h,'nombre')||has(h,'elemento')||has(h,'custodio')){ if(!idx.claveCols) idx.claveCols=[]; idx.claveCols.push(i); if(idx.clave==null) idx.clave=i; }
     else if((has(h,'monto')||has(h,'importe')) && idx.monto==null) idx.monto=i;
     else if((has(h,'unidad')||has(h,'vehiculo')) && idx.unidad==null) idx.unidad=i;
     else if(has(h,'embarque') && idx.embarque==null) idx.embarque=i;
@@ -1704,7 +1706,18 @@ function parseServicios(aoa){
     var estadoO=mapEstado(cell(row,idx.estadoO));
     var estadoD=mapEstado(cell(row,idx.estadoD));
     var monto=parseFloat(String(cell(row,idx.monto)||'').replace(/[^0-9.\-]/g,''))||0;
-    var cust=parseCust(cell(row,idx.clave));
+    var claveCols = idx.claveCols || (idx.clave!=null?[idx.clave]:[]);
+    var custs=[];
+    claveCols.forEach(function(ci){
+      splitCustCell(cell(row,ci)).forEach(function(piece){
+        var p=parseCust(piece);
+        if(p.num||p.nom) custs.push(p);
+      });
+    });
+    // quitar repetidos (mismo número o mismo nombre)
+    var vistos={}, custsU=[];
+    custs.forEach(function(p){ var k=p.num?('n:'+p.num):('x:'+nrmNombre(p.nom)); if(!vistos[k]){ vistos[k]=1; custsU.push(p); } });
+    custs=custsU;
     if(!cliNom && (tipo==='BXC'||tipo==='BXF')) cliNom='Bridgestone de México';
     var extras=[]; var est=String(cell(row,idx.estatus)||'').trim(); if(est) extras.push('Estatus: '+est);
     var uni=String(cell(row,idx.unidad)||'').trim(); if(uni) extras.push('Unidad: '+uni);
@@ -1713,7 +1726,7 @@ function parseServicios(aoa){
       cons:cons, tipo:tipo, clienteNom:cliNom, origen:origen, estadoOrigen:estadoO, destino:destino, estadoDestino:estadoD,
       fecha: aFecha(cell(row,idx.fecha)) || aFecha(cell(row,idx.finaliza)),
       hInicio: aHora(cell(row,idx.cita)), hPresentacion: aHora(cell(row,idx.present)), hTermino: aHora(cell(row,idx.finaliza)),
-      cust:cust, monto:monto, obs:extras.join(' · ')
+      cust:custs[0]||{num:'',nom:''}, custs:custs, monto:monto, obs:extras.join(' · ')
     });
   }
   return { idx:idx, servicios:out };
@@ -1748,16 +1761,19 @@ function previewServicios(p){
   var idx=p.idx, S=p.servicios;
   var campos=[['tipo','Tipo (ID)'],['cons','Consecutivo'],['servicio','Cliente'],['origen','Origen'],['estadoO','Edo. origen'],['destino','Destino'],['estadoD','Edo. destino'],['fecha','Fecha'],['cita','Inicio (cita)'],['present','Presentación'],['finaliza','Término'],['clave','Custodio'],['monto','Monto']];
   var detect=campos.map(function(c){ var ok=idx[c[0]]!=null; return '<span class="pill '+(ok?'ok':'off')+'">'+(ok?'✓ ':'– ')+c[1]+'</span>'; }).join(' ');
+  var nColsCust=(idx.claveCols||(idx.clave!=null?[idx.clave]:[])).length;
+  var maxCust=S.reduce(function(a,s){return Math.max(a,(s.custs||[]).length);},0);
+  var custInfo='<div class="small muted" style="margin-top:8px">Columnas de custodio detectadas: <b>'+nColsCust+'</b> · máximo de custodios leídos en una fila: <b>'+maxCust+'</b>.</div>';
   var rows=S.slice(0,10).map(function(s){ var ti=tipoInfo(s.tipo);
     return '<tr><td><span class="cons '+ti.cls+'">'+esc(s.tipo)+esc(s.cons)+'</span></td>'
       +'<td>'+esc(s.clienteNom||'—')+'</td>'
       +'<td class="small">'+esc(s.origen||'—')+' ('+esc(s.estadoOrigen||'—')+') → '+esc(s.destino||'—')+' ('+esc(s.estadoDestino||'—')+')</td>'
       +'<td class="small">'+esc(s.fecha||'—')+'</td>'
       +'<td class="small">'+esc(s.hInicio||'—')+' / '+esc(s.hTermino||'—')+'</td>'
-      +'<td class="small">'+esc((s.cust.num?s.cust.num+' ':'')+(s.cust.nom||'—'))+'</td>'
+      +'<td class="small">'+esc(s.custs&&s.custs.length? s.custs.map(function(p){return (p.num?p.num+' ':'')+p.nom;}).join(' · ') : '—')+'</td>'
       +'<td class="right small">'+(s.monto>0?money(s.monto):'auto')+'</td></tr>';
   }).join('') || '<tr><td colspan="7" class="empty">No se detectaron servicios. Revisa que la hoja tenga encabezados.</td></tr>';
-  return '<div class="card"><div class="card-h"><h2>Columnas detectadas</h2></div><div style="display:flex;flex-wrap:wrap;gap:6px">'+detect+'</div>'
+  return '<div class="card"><div class="card-h"><h2>Columnas detectadas</h2></div><div style="display:flex;flex-wrap:wrap;gap:6px">'+detect+'</div>'+custInfo
     +'<div class="small muted" style="margin-top:10px">Se importarán <b>'+S.length+'</b> servicios. Salida de base y liberación quedan vacías para que las completes y se calcule el viático. Las filas con monto entran con importe manual.</div></div>'
     +'<div class="card"><div class="card-h"><h2>Vista previa</h2><div class="grow"></div><button class="btn btn-primary" onclick="confirmarImport()">Importar '+S.length+' servicios</button></div>'
     +'<div class="tbl-wrap"><table><thead><tr><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Fecha</th><th>Inicio/Término</th><th>Custodio</th><th class="right">Monto</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
@@ -1953,7 +1969,8 @@ function confirmarImport(){
   if(tipo==='servicios'){
     if(!_parsed||!_parsed.servicios.length){ toast('No hay servicios para importar'); return; }
     var cl=distinctClientes(_parsed.servicios.map(function(s){return s.clienteNom;}));
-    var cu=distinctCust(_parsed.servicios.map(function(s){return s.cust;}));
+    var allCust=[]; _parsed.servicios.forEach(function(s){ (s.custs||[]).forEach(function(p){ allCust.push(p); }); });
+    var cu=distinctCust(allCust);
     var conf=escanear('cliente',cl).concat(escanear('custodio',cu));
     if(conf.length){ pedirRevision(conf, _finalizarServicios); return; }
     _finalizarServicios(); return;
@@ -1980,14 +1997,15 @@ function _finalizarServicios(){
   var n=0, meses={};
   _parsed.servicios.forEach(function(s){
     var clienteId=resolveCliente(s.clienteNom);
-    var custId=resolveCust(s.cust);
+    var custIds=[];
+    (s.custs||[]).forEach(function(p){ var id=resolveCust(p); if(id && custIds.indexOf(id)<0) custIds.push(id); });
     var zona=esExencionCdmxEdomex(s.estadoOrigen,s.estadoDestino)?'local':zonaSugerida(s.estadoOrigen,s.estadoDestino,s.origen,s.destino);
     var fecha=s.fecha || defaultFecha();
     DB.servicios.push(stamp({
       id:uid(), cons:s.cons, tipo:s.tipo, clienteId:clienteId, fecha:fecha, concepto:'operativo', base:'', estatusPago:'pendiente',
       origen:s.origen, estadoOrigen:s.estadoOrigen, destino:s.destino, estadoDestino:s.estadoDestino, zona:zona, obs:s.obs,
       fechaInicio:fecha, horaInicio:s.hInicio, fechaFin:fecha, horaFin:s.hTermino, horasTrayecto:0,
-      custodios: custId?[custId]:[], importeManual: s.monto>0?s.monto:null, importado:true
+      custodios: custIds, importeManual: s.monto>0?s.monto:null, importado:true
     },true));
     var mk=(fecha||'').slice(0,7); if(mk) meses[mk]=(meses[mk]||0)+1;
     n++;
