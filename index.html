@@ -180,6 +180,8 @@
     .app{display:block} .content{padding:0;max-width:none}
     .card{box-shadow:none;border:1px solid #ccc}
     body{font-size:13px}
+    .cp-doc{page-break-after:always}
+    .cp-doc:last-child{page-break-after:auto}
   }
 </style>
 </head>
@@ -240,9 +242,9 @@
       </div>
       <div class="grow"></div>
       <div class="period">
-        <span>Periodo</span>
-        <select class="inp" id="periodMode" style="width:auto;padding:8px 10px"><option value="mes">Mes</option><option value="semana">Semana</option></select>
-        <input type="month" class="inp" id="period" style="width:auto;padding:8px 10px">
+        <span>Semana</span>
+        <input type="hidden" id="periodMode" value="semana">
+        <input type="week" class="inp" id="period" style="width:auto;padding:8px 10px">
       </div>
     </div>
     <div class="content" id="content"><!-- pages injected --></div>
@@ -284,6 +286,12 @@ var FIREBASE_CONFIG = {
 function firebaseConfigurada(){
   return !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('TU_')!==0);
 }
+
+/* ====================================================================
+   CONTRASEÑA PARA REINICIAR TODOS LOS DATOS
+   Cámbiala por la que quieras. Solo quien la conozca podrá borrar todo.
+   ==================================================================== */
+var RESET_PASSWORD = "reiniciar2025";
 
 // ---- Tipos de servicio y colores ----
 var TIPOS = [
@@ -387,7 +395,7 @@ function stamp(obj, isNew){
 function money(n){ n=Math.round(n||0); return '$'+n.toLocaleString('es-MX'); }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function periodVal(){ return document.getElementById('period').value; } // 'YYYY-MM' o 'YYYY-Www'
-function periodModeVal(){ var e=document.getElementById('periodMode'); return e?e.value:'mes'; }
+function periodModeVal(){ return 'semana'; } // App fija en modo semanal
 function isoWeekKey(dateStr){
   if(!dateStr) return '';
   var d=new Date(dateStr+'T00:00:00'); if(isNaN(d)) return '';
@@ -531,8 +539,7 @@ function nav(page){
 }
 function irAPeriodo(mk){
   if(mk==='sin fecha'){ toast('Esos servicios no tienen fecha; edítalos para asignarles una.'); return; }
-  if(periodModeVal()!=='mes'){ document.getElementById('periodMode').value='mes'; document.getElementById('period').type='month'; }
-  document.getElementById('period').value=mk;
+  var inp=document.getElementById('period'); inp.type='week'; inp.value=mk;
   render();
 }
 function render(){
@@ -886,7 +893,7 @@ function viewServicios(){
   var listRows=enPeriodo.slice().reverse().map(servicioRow).join('')
     || '<tr><td colspan="8" class="empty">Sin servicios en el periodo seleccionado</td></tr>';
   var otrosMeses={};
-  DB.servicios.forEach(function(s){ if(!inPeriod(s.fecha)){ var mk=(s.fecha||'').slice(0,7)||'sin fecha'; otrosMeses[mk]=(otrosMeses[mk]||0)+1; } });
+  DB.servicios.forEach(function(s){ if(!inPeriod(s.fecha)){ var mk=isoWeekKey(s.fecha)||'sin fecha'; otrosMeses[mk]=(otrosMeses[mk]||0)+1; } });
   var avisoOtros='';
   var keysOtros=Object.keys(otrosMeses).sort();
   if(keysOtros.length){
@@ -1401,21 +1408,69 @@ function after_incidencias(){ var f=document.getElementById('i-fecha'); if(f&&!f
    COMPROBANTE DE PAGO (por custodio)
    ==================================================================== */
 function viewComprobante(){
-  var custOpt=DB.custodios.map(function(c){return {v:c.id,l:(c.numEmpleado?c.numEmpleado+' ':'')+c.nombre};});
+  var custs=DB.custodios.slice().sort(function(a,b){ return String(a.numEmpleado||'').localeCompare(String(b.numEmpleado||''),'es',{numeric:true}); });
+  var lista = custs.length
+    ? custs.map(function(c){ return '<label class="cust-opt" data-id="'+c.id+'"><input type="checkbox" class="cp-chk" value="'+c.id+'" onchange="this.closest(\'.cust-opt\').classList.toggle(\'on\',this.checked);actualizarSelComprobante()"> '+esc((c.numEmpleado?c.numEmpleado+' ':'')+c.nombre)+(c.base?(' <span class="muted small">· '+esc(c.base)+'</span>'):'')+'</label>'; }).join('')
+    : '<span class="muted small">No hay custodios. Agrega alguno en el catálogo de Custodios.</span>';
   return ''
-  + '<div class="card no-print"><div class="card-h"><h2>Generar comprobante</h2></div>'
-  +   '<div class="grid g3"><div><label class="fl">Custodio</label>'+selectHTML('cp-cust',custOpt,'','genComprobante()')+'</div>'
-  +     '<div style="display:flex;align-items:flex-end;gap:8px">'
-  +       '<button class="btn btn-accent" onclick="genComprobante()">Ver comprobante</button>'
-  +       '<button class="btn" onclick="window.print()">Imprimir / PDF</button></div></div>'
-  +   '<div class="small muted" style="margin-top:8px">El comprobante usa el periodo seleccionado arriba ('+periodLabel()+').</div>'
+  + '<div class="card no-print"><div class="card-h"><h2>Generar comprobantes</h2></div>'
+  +   '<div class="small muted" style="margin-bottom:10px">Los comprobantes usan la semana seleccionada arriba ('+periodLabel()+'). Busca, marca uno o varios custodios y expórtalos.</div>'
+  +   '<input class="inp" id="cp-search" placeholder="🔍 Buscar custodio por nombre o número…" autocomplete="off" oninput="filtrarComprobanteCust()" style="max-width:420px;margin-bottom:10px">'
+  +   '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px">'
+  +     '<label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="cp-checkall" onchange="toggleAllComprobante(this.checked)"> Seleccionar todos (visibles)</label>'
+  +     '<span class="muted small" id="cp-selcount">0 seleccionados</span>'
+  +   '</div>'
+  +   '<div class="cust-pick" id="cp-list" style="max-height:260px;overflow:auto;padding:2px">'+lista+'</div>'
+  +   '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+  +     '<button class="btn btn-accent" onclick="genComprobante()">Ver comprobante(s)</button>'
+  +     '<button class="btn btn-primary" onclick="exportarComprobantesPDF()">Exportar PDF (masivo)</button>'
+  +     '<span class="muted small">Se genera un PDF con un comprobante por hoja para cada custodio seleccionado.</span>'
+  +   '</div>'
   + '</div>'
   + '<div id="cp-out"></div>';
 }
+function filtrarComprobanteCust(){
+  var q=(document.getElementById('cp-search').value||'').toLowerCase().trim();
+  document.querySelectorAll('#cp-list .cust-opt').forEach(function(el){
+    var txt=el.textContent.toLowerCase();
+    el.style.display=(!q||txt.indexOf(q)>=0)?'':'none';
+  });
+  actualizarSelComprobante();
+}
+function comprobanteSeleccionados(){
+  return Array.prototype.slice.call(document.querySelectorAll('.cp-chk:checked')).map(function(i){return i.value;});
+}
+function toggleAllComprobante(on){
+  document.querySelectorAll('#cp-list .cust-opt').forEach(function(el){
+    if(el.style.display==='none') return; // sólo los visibles según la búsqueda
+    var chk=el.querySelector('.cp-chk'); if(chk){ chk.checked=on; el.classList.toggle('on',on); }
+  });
+  actualizarSelComprobante();
+}
+function actualizarSelComprobante(){
+  var n=comprobanteSeleccionados().length;
+  var lbl=document.getElementById('cp-selcount'); if(lbl) lbl.textContent=n+' seleccionado'+(n===1?'':'s');
+  var all=document.getElementById('cp-checkall');
+  if(all){
+    var vis=Array.prototype.slice.call(document.querySelectorAll('#cp-list .cust-opt')).filter(function(el){return el.style.display!=='none';});
+    var marc=vis.filter(function(el){var c=el.querySelector('.cp-chk');return c&&c.checked;});
+    all.checked=vis.length>0&&marc.length===vis.length;
+    all.indeterminate=marc.length>0&&marc.length<vis.length;
+  }
+}
 function genComprobante(){
-  var id=document.getElementById('cp-cust').value;
+  var ids=comprobanteSeleccionados();
   var out=document.getElementById('cp-out');
-  if(!id){ out.innerHTML='<div class="card"><div class="empty">Selecciona un custodio.</div></div>'; return; }
+  if(!ids.length){ out.innerHTML='<div class="card"><div class="empty">Selecciona al menos un custodio.</div></div>'; return; }
+  out.innerHTML=ids.map(comprobanteHTML).join('');
+}
+function exportarComprobantesPDF(){
+  var ids=comprobanteSeleccionados();
+  if(!ids.length){ toast('Selecciona al menos un custodio para exportar'); return; }
+  genComprobante();
+  setTimeout(function(){ window.print(); }, 80); // deja que rendericen antes de abrir el diálogo de impresión/PDF
+}
+function comprobanteHTML(id){
   var cust=custodioById(id);
   var serv=DB.servicios.filter(function(s){return inPeriod(s.fecha)&&(s.custodios||[]).indexOf(id)>=0;});
   var operativos=serv.filter(function(s){return s.concepto!=='casa_descanso';});
@@ -1450,10 +1505,10 @@ function genComprobante(){
   var recRows=recargas.map(function(r){return '<tr><td>'+esc(r.fecha)+'</td><td>'+esc(r.motivo||'—')+'</td><td class="right"><b>'+money(r.monto)+'</b></td></tr>';}).join('');
   var inciRows=inci.map(function(i){return '<tr><td>'+esc(i.fecha)+'</td><td>'+esc(i.tipo)+'</td><td class="right"><b style="color:'+(i.signo==='resta'?'var(--danger)':'var(--ok)')+'">'+(i.signo==='resta'?'−':'+')+money(i.monto)+'</b></td></tr>';}).join('');
 
-  document.getElementById('cp-out').innerHTML=''
+  return '<div class="cp-doc">'
   + '<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">'
   +   '<div><h2 style="font-size:20px">Comprobante de pago</h2><div class="muted">'+esc(cust?cust.nombre:'—')+' · N° '+esc(cust?cust.numEmpleado||'—':'—')+' · Base '+esc(cust?cust.base||'—':'—')+'</div></div>'
-  +   '<div class="right"><div class="muted small">Periodo</div><b>'+periodLabel()+'</b></div>'
+  +   '<div class="right"><div class="muted small">Semana</div><b>'+periodLabel()+'</b></div>'
   + '</div></div>'
   + servBlock(operativos,'Gastos operativos de servicio')
   + servBlock(casa,'Viáticos Casa de Descanso (Querétaro)')
@@ -1467,7 +1522,8 @@ function genComprobante(){
   +   '<div class="row"><span class="k">Recargas telefónicas</span><span class="v">'+money(subRec)+'</span></div>'
   +   '<div class="row"><span class="k">Incidencias y ajustes</span><span class="v">'+money(subInci)+'</span></div>'
   +   '<div class="total"><span>Total a pagar</span><span>'+money(totalFinal)+'</span></div>'
-  + '</div></div>';
+  + '</div></div>'
+  + '</div>';
 }
 function after_comprobante(){ /* nada */ }
 
@@ -2007,12 +2063,12 @@ function _finalizarServicios(){
       fechaInicio:fecha, horaInicio:s.hInicio, fechaFin:fecha, horaFin:s.hTermino, horasTrayecto:0,
       custodios: custIds, importeManual: s.monto>0?s.monto:null, importado:true
     },true));
-    var mk=(fecha||'').slice(0,7); if(mk) meses[mk]=(meses[mk]||0)+1;
+    var mk=isoWeekKey(fecha); if(mk) meses[mk]=(meses[mk]||0)+1;
     n++;
   });
   persist();
   document.getElementById('im-prev').innerHTML=''; _parsed=null;
-  if(periodModeVal()!=='mes'){ document.getElementById('periodMode').value='mes'; document.getElementById('period').type='month'; }
+  document.getElementById('period').type='week';
   var cur=periodVal();
   if(!meses[cur]){ var best=null,bn=-1; for(var mk in meses){ if(meses[mk]>bn){bn=meses[mk];best=mk;} } if(best) document.getElementById('period').value=best; }
   var resumen=Object.keys(meses).sort().map(function(m){ return m+': '+meses[m]; }).join(' · ');
@@ -2087,12 +2143,6 @@ function setupChrome(){
   document.getElementById('menuBtn').addEventListener('click',function(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('scrim').classList.remove('hide'); });
   document.getElementById('scrim').addEventListener('click',function(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('scrim').classList.add('hide'); });
   document.getElementById('period').addEventListener('change',function(){ render(); });
-  document.getElementById('periodMode').addEventListener('change',function(){
-    var mode=this.value, inp=document.getElementById('period');
-    if(mode==='semana'){ inp.type='week'; inp.value=isoWeekKey(new Date().toISOString().slice(0,10)); }
-    else { inp.type='month'; inp.value=new Date().toISOString().slice(0,7); }
-    render();
-  });
   document.getElementById('who').textContent=DB.user;
   var cu=document.getElementById('changeUser');
   if(_authActiva){ cu.textContent='Cerrar sesión'; }
@@ -2101,6 +2151,9 @@ function setupChrome(){
     var u=prompt('Tu nombre de usuario (para auditoría):',DB.user); if(u){ DB.user=u.trim(); persist(); document.getElementById('who').textContent=DB.user; }
   });
   document.getElementById('resetData').addEventListener('click',function(e){ e.preventDefault();
+    var clave=prompt('Escribe la contraseña para reiniciar TODOS los datos:');
+    if(clave===null) return;                       // el usuario canceló
+    if(clave!==RESET_PASSWORD){ toast('Contraseña incorrecta. No se reinició nada.'); return; }
     if(_modoNube){
       if(confirm('¿Borrar TODOS los registros COMPARTIDOS en la nube? Esto afecta a todos los usuarios y no se puede deshacer.')){
         borrarTodoNube().then(function(){ try{localStorage.removeItem('opscontrol_v2');}catch(e){} toast('Datos de la nube borrados'); })
@@ -2110,7 +2163,7 @@ function setupChrome(){
       if(confirm('¿Borrar TODOS los datos locales? Esto no se puede deshacer.')){ localStorage.removeItem('opscontrol_v2'); location.reload(); }
     }
   });
-  var p=document.getElementById('period'); if(!p.value) p.value=new Date().toISOString().slice(0,7);
+  var p=document.getElementById('period'); p.type='week'; if(!p.value) p.value=isoWeekKey(new Date().toISOString().slice(0,10));
 }
 function seedIfEmpty(){
   if(DB.clientes.length||DB.custodios.length||DB.servicios.length) return;
