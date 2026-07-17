@@ -1331,16 +1331,32 @@ function after_fijos(){ var f=document.getElementById('f-fecha'); if(f&&!f.value
 /* ====================================================================
    RECARGAS TELEFÓNICAS
    ==================================================================== */
+function custodiosConServicioEnPeriodo(){
+  var ids={};
+  DB.servicios.forEach(function(s){
+    if(!inPeriod(s.fecha)) return;
+    (s.custodios||[]).forEach(function(cid){ ids[cid]=true; });
+  });
+  return DB.custodios.filter(function(c){ return ids[c.id] && c.activo!==false; })
+    .sort(function(a,b){ return String(a.numEmpleado||'').localeCompare(String(b.numEmpleado||''),'es',{numeric:true}); });
+}
 function viewRecargas(){
-  var custOpt=DB.custodios.filter(function(c){return c.activo!==false;}).map(function(c){return {v:c.id,l:(c.numEmpleado?c.numEmpleado+' ':'')+c.nombre};});
+  var custConServ = custodiosConServicioEnPeriodo();
+  var custOpt = custConServ.map(function(c){return {v:c.id,l:(c.numEmpleado?c.numEmpleado+' ':'')+c.nombre};});
   var rows=DB.recargas.filter(function(r){return inPeriod(r.fecha);}).slice().reverse().map(function(r){
     return '<tr><td>'+esc(r.fecha)+'</td><td>'+esc(custodioNombre(r.custodioId))+'</td><td>'+esc(r.motivo||'—')+'</td><td class="small muted">'+esc(r.obs||'')+'</td>'
       +'<td class="right"><b>'+money(r.monto)+'</b></td>'
       +'<td>'+(r.pendiente?'<span class="pill warn">Pendiente</span>':'<span class="pill ok">Aplicada</span>')+'</td>'
       +'<td class="right actions"><button class="btn btn-sm" onclick="toggleRecarga(\''+r.id+'\')">'+(r.pendiente?'Aplicar':'Pendiente')+'</button><button class="btn btn-sm btn-danger" onclick="delRecarga(\''+r.id+'\')">Borrar</button></td></tr>';
   }).join('') || '<tr><td colspan="7" class="empty">Sin recargas en el periodo</td></tr>';
+
+  var listaMasiva = custConServ.length
+    ? custConServ.map(function(c){ return '<label class="cust-opt" data-id="'+c.id+'"><input type="checkbox" class="rm-chk" value="'+c.id+'" onchange="this.closest(\'.cust-opt\').classList.toggle(\'on\',this.checked);actualizarSelMasiva()"> '+esc((c.numEmpleado?c.numEmpleado+' ':'')+c.nombre)+(c.base?(' <span class="muted small">· '+esc(c.base)+'</span>'):'')+'</label>'; }).join('')
+    : '<span class="muted small">No hay custodios con servicio en el periodo ('+periodLabel()+').</span>';
+
   return ''
-  + '<div class="card"><div class="card-h"><h2>Registrar recarga</h2></div>'
+  + '<div class="card"><div class="card-h"><h2>Registrar recarga individual</h2><div class="grow"></div><span class="sub">Solo custodios con servicio en '+periodLabel()+'</span></div>'
+  +   (custConServ.length ? '' : '<div class="muted small" style="margin-bottom:10px">⚠️ No hay custodios con servicio en el periodo actual. Registra servicios primero.</div>')
   +   '<div class="grid g4">'
   +     '<div><label class="fl">Fecha</label><input class="inp" type="date" id="r-fecha"></div>'
   +     '<div><label class="fl">Custodio</label>'+selectHTML('r-cust',custOpt,'')+'</div>'
@@ -1349,6 +1365,23 @@ function viewRecargas(){
   +   '</div>'
   +   '<div class="grid g2" style="margin-top:14px"><div><label class="fl">Observaciones</label><input class="inp" id="r-obs" placeholder="Opcional"></div>'
   +     '<div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="addRecarga()">+ Agregar recarga</button></div></div>'
+  + '</div>'
+  + '<div class="card"><div class="card-h"><h2>Recargas masivas</h2><div class="grow"></div><span class="sub">Aplica el mismo monto a varios custodios de una vez</span></div>'
+  +   '<div class="grid g4">'
+  +     '<div><label class="fl">Fecha</label><input class="inp" type="date" id="rm-fecha"></div>'
+  +     '<div><label class="fl">Monto (a c/u)</label><input class="inp" type="number" id="rm-monto" placeholder="$"></div>'
+  +     '<div><label class="fl">Motivo</label><input class="inp" id="rm-motivo" placeholder="Ej. Recarga semanal"></div>'
+  +     '<div><label class="fl">Observaciones</label><input class="inp" id="rm-obs" placeholder="Opcional"></div>'
+  +   '</div>'
+  +   '<div style="margin-top:14px">'
+  +     '<input class="inp" id="rm-search" placeholder="🔍 Buscar custodio…" autocomplete="off" oninput="filtrarMasiva()" style="max-width:420px;margin-bottom:10px">'
+  +     '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px">'
+  +       '<label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="rm-checkall" onchange="toggleAllMasiva(this.checked)"> Seleccionar todos (visibles)</label>'
+  +       '<span class="muted small" id="rm-selcount">0 seleccionados</span>'
+  +     '</div>'
+  +     '<div class="cust-pick" id="rm-list" style="max-height:260px;overflow:auto;padding:2px">'+listaMasiva+'</div>'
+  +   '</div>'
+  +   '<div style="margin-top:14px"><button class="btn btn-accent" onclick="addRecargasMasivas()">+ Aplicar recarga masiva</button></div>'
   + '</div>'
   + '<div class="card"><div class="card-h"><h2>Recargas del periodo</h2></div>'
   +   '<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Custodio</th><th>Motivo</th><th>Obs.</th><th class="right">Monto</th><th>Estatus</th><th class="right"></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
@@ -1360,9 +1393,53 @@ function addRecarga(){
   if(!r.fecha||!r.custodioId||!r.monto){ toast('Completa fecha, custodio y monto'); return; }
   stamp(r,true); DB.recargas.push(r); persist(); toast('Recarga registrada'); render();
 }
+function filtrarMasiva(){
+  var q=(document.getElementById('rm-search').value||'').toLowerCase().trim();
+  document.querySelectorAll('#rm-list .cust-opt').forEach(function(el){
+    var txt=el.textContent.toLowerCase();
+    el.style.display=(!q||txt.indexOf(q)>=0)?'':'none';
+  });
+  actualizarSelMasiva();
+}
+function toggleAllMasiva(on){
+  document.querySelectorAll('#rm-list .cust-opt').forEach(function(el){
+    if(el.style.display==='none') return;
+    var chk=el.querySelector('.rm-chk'); if(chk){ chk.checked=on; el.classList.toggle('on',on); }
+  });
+  actualizarSelMasiva();
+}
+function actualizarSelMasiva(){
+  var n=document.querySelectorAll('.rm-chk:checked').length;
+  var lbl=document.getElementById('rm-selcount'); if(lbl) lbl.textContent=n+' seleccionado'+(n===1?'':'s');
+  var all=document.getElementById('rm-checkall');
+  if(all){
+    var vis=Array.prototype.slice.call(document.querySelectorAll('#rm-list .cust-opt')).filter(function(el){return el.style.display!=='none';});
+    var marc=vis.filter(function(el){var c=el.querySelector('.rm-chk');return c&&c.checked;});
+    all.checked=vis.length>0&&marc.length===vis.length;
+    all.indeterminate=marc.length>0&&marc.length<vis.length;
+  }
+}
+function addRecargasMasivas(){
+  var fecha=document.getElementById('rm-fecha').value;
+  var monto=+document.getElementById('rm-monto').value||0;
+  var motivo=document.getElementById('rm-motivo').value.trim();
+  var obs=document.getElementById('rm-obs').value.trim();
+  var ids=Array.prototype.slice.call(document.querySelectorAll('.rm-chk:checked')).map(function(i){return i.value;});
+  if(!fecha||!monto){ toast('Completa fecha y monto'); return; }
+  if(!ids.length){ toast('Selecciona al menos un custodio'); return; }
+  if(!confirm('¿Aplicar recarga de '+money(monto)+' a '+ids.length+' custodio(s)?')) return;
+  ids.forEach(function(cid){
+    var r={id:uid(),fecha:fecha,custodioId:cid,monto:monto,motivo:motivo,obs:obs,pendiente:true};
+    stamp(r,true); DB.recargas.push(r);
+  });
+  persist(); toast(ids.length+' recarga(s) registrada(s)'); render();
+}
 function toggleRecarga(id){ var r=DB.recargas.find(function(x){return x.id===id;}); if(r){r.pendiente=!r.pendiente;stamp(r,false);} persist(); render(); }
 function delRecarga(id){ if(!confirm('¿Borrar?'))return; DB.recargas=DB.recargas.filter(function(r){return r.id!==id;}); persist(); render(); }
-function after_recargas(){ var f=document.getElementById('r-fecha'); if(f&&!f.value){ f.value=defaultFecha(); } }
+function after_recargas(){
+  var f=document.getElementById('r-fecha'); if(f&&!f.value){ f.value=defaultFecha(); }
+  var fm=document.getElementById('rm-fecha'); if(fm&&!fm.value){ fm.value=defaultFecha(); }
+}
 
 /* ====================================================================
    INCIDENCIAS Y AJUSTES
@@ -1482,9 +1559,11 @@ function comprobanteHTML(id){
   function servBlock(arr,titulo){
     if(!arr.length) return '';
     var sub=0;
-    var rows=arr.map(function(s){
+    var arrOrd = arr.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); });
+    var rows=arrOrd.map(function(s){
       var c=calcularServicio(s); sub+=c.importePorCustodio; var ti=tipoInfo(s.tipo);
-      return '<tr><td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span></td>'
+      return '<tr><td class="small">'+esc(s.fecha||'—')+'</td>'
+        +'<td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span></td>'
         +'<td class="small">'+esc(s.origen||'—')+' → '+esc(s.destino||'—')+'</td>'
         +'<td class="small">'+(c.horasTotal!=null?c.horasTotal.toFixed(1)+' h':'—')+'</td>'
         +'<td class="small">'+esc(c.zonaAplicada)+'</td>'
@@ -1492,7 +1571,7 @@ function comprobanteHTML(id){
         +'<td class="right"><b>'+money(c.importePorCustodio)+'</b></td></tr>';
     }).join('');
     return '<div class="card"><div class="card-h"><h2>'+esc(titulo)+'</h2><div class="grow"></div><span class="sub">Subtotal '+money(sub)+'</span></div>'
-      +'<div class="tbl-wrap"><table><thead><tr><th>Servicio</th><th>Ruta</th><th>Horas</th><th>Zona</th><th>Regla aplicada</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+      +'<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Servicio</th><th>Ruta</th><th>Horas</th><th>Zona</th><th>Regla aplicada</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   }
   var subOper=operativos.reduce(function(a,s){return a+calcularServicio(s).importePorCustodio;},0);
   var subCasa=casa.reduce(function(a,s){return a+calcularServicio(s).importePorCustodio;},0);
