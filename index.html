@@ -717,6 +717,7 @@ function editCustodio(id){
   var c=custodioById(id); if(!c)return;
   var nom=prompt('Nombre completo:',c.nombre); if(nom==null)return; c.nombre=nom.trim().toUpperCase();
   var num=prompt('N° de empleado:',c.numEmpleado||''); if(num!=null) c.numEmpleado=num.trim();
+  var base=prompt('Base:',c.base||''); if(base!=null) c.base=base.trim();
   stamp(c,false); persist(); render();
 }
 function toggleCustodio(id){ var c=custodioById(id); if(c){c.activo=(c.activo===false);stamp(c,false);} persist(); render(); }
