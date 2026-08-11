@@ -1803,7 +1803,7 @@ function mapearColumnasServicios(aoa){
     var c=0; (aoa[r]||[]).forEach(function(h){ var n=nrm(h); KEYS.forEach(function(k){ if(n.indexOf(k)>=0) c++; }); });
     if(c>best){ best=c; bestRow=r; }
   }
-  var H=aoa[bestRow]||[], idx={}, estadoCols=[];
+  var H=aoa[bestRow]||[], idx={}, estadoCols=[], fechaCols=[];
   function has(h,t){ return h.indexOf(t)>=0; }
   for(var i=0;i<H.length;i++){
     var h=nrm(H[i]);
@@ -1814,7 +1814,7 @@ function mapearColumnasServicios(aoa){
     else if(has(h,'origen') && idx.origen==null) idx.origen=i;
     else if(has(h,'destino') && idx.destino==null) idx.destino=i;
     else if(h==='estado'||has(h,'estado ')) estadoCols.push(i);
-    else if(has(h,'fecha') && idx.fecha==null) idx.fecha=i;
+    else if(has(h,'fecha')) fechaCols.push(i);
     else if(has(h,'cita') && idx.cita==null) idx.cita=i;
     else if(has(h,'present') && idx.present==null) idx.present=i;
     else if(has(h,'finaliza') && idx.finaliza==null) idx.finaliza=i;
@@ -1826,6 +1826,8 @@ function mapearColumnasServicios(aoa){
   }
   if(idx.origen!=null){ var eo=estadoCols.filter(function(c){return c>idx.origen;}); if(eo.length) idx.estadoO=Math.min.apply(null,eo); }
   if(idx.destino!=null){ var ed=estadoCols.filter(function(c){return c>idx.destino;}); if(ed.length) idx.estadoD=Math.min.apply(null,ed); }
+  // 1a "FECHA" = fecha de inicio; 2a "FECHA" (si existe) = fecha de finalización
+  if(fechaCols.length){ idx.fecha=fechaCols[0]; if(fechaCols.length>1) idx.fechaFin=fechaCols[1]; }
   return { idx:idx, headerRow:bestRow };
 }
 function parseServicios(aoa){
@@ -1861,6 +1863,7 @@ function parseServicios(aoa){
     out.push({
       cons:cons, tipo:tipo, clienteNom:cliNom, origen:origen, estadoOrigen:estadoO, destino:destino, estadoDestino:estadoD,
       fecha: aFecha(cell(row,idx.fecha)) || aFecha(cell(row,idx.finaliza)),
+      fechaFin: aFecha(cell(row,idx.fechaFin)),
       hInicio: aHora(cell(row,idx.cita)), hPresentacion: aHora(cell(row,idx.present)), hTermino: aHora(cell(row,idx.finaliza)),
       cust:custs[0]||{num:'',nom:''}, custs:custs, monto:monto, obs:extras.join(' · ')
     });
@@ -1895,24 +1898,25 @@ function previsualizar(){
 }
 function previewServicios(p){
   var idx=p.idx, S=p.servicios;
-  var campos=[['tipo','Tipo (ID)'],['cons','Consecutivo'],['servicio','Cliente'],['origen','Origen'],['estadoO','Edo. origen'],['destino','Destino'],['estadoD','Edo. destino'],['fecha','Fecha'],['cita','Inicio (cita)'],['present','Presentación'],['finaliza','Término'],['clave','Custodio'],['monto','Monto']];
+  var campos=[['tipo','Tipo (ID)'],['cons','Consecutivo'],['servicio','Cliente'],['origen','Origen'],['estadoO','Edo. origen'],['destino','Destino'],['estadoD','Edo. destino'],['fecha','Fecha inicio'],['fechaFin','Fecha fin'],['cita','Inicio (cita)'],['present','Presentación'],['finaliza','Término'],['clave','Custodio'],['monto','Monto']];
   var detect=campos.map(function(c){ var ok=idx[c[0]]!=null; return '<span class="pill '+(ok?'ok':'off')+'">'+(ok?'✓ ':'– ')+c[1]+'</span>'; }).join(' ');
   var nColsCust=(idx.claveCols||(idx.clave!=null?[idx.clave]:[])).length;
   var maxCust=S.reduce(function(a,s){return Math.max(a,(s.custs||[]).length);},0);
   var custInfo='<div class="small muted" style="margin-top:8px">Columnas de custodio detectadas: <b>'+nColsCust+'</b> · máximo de custodios leídos en una fila: <b>'+maxCust+'</b>.</div>';
   var rows=S.slice(0,10).map(function(s){ var ti=tipoInfo(s.tipo);
+    var fechas = s.fechaFin && s.fechaFin!==s.fecha ? (esc(s.fecha||'—')+' → '+esc(s.fechaFin)) : esc(s.fecha||'—');
     return '<tr><td><span class="cons '+ti.cls+'">'+esc(s.tipo)+esc(s.cons)+'</span></td>'
       +'<td>'+esc(s.clienteNom||'—')+'</td>'
       +'<td class="small">'+esc(s.origen||'—')+' ('+esc(s.estadoOrigen||'—')+') → '+esc(s.destino||'—')+' ('+esc(s.estadoDestino||'—')+')</td>'
-      +'<td class="small">'+esc(s.fecha||'—')+'</td>'
+      +'<td class="small">'+fechas+'</td>'
       +'<td class="small">'+esc(s.hInicio||'—')+' / '+esc(s.hTermino||'—')+'</td>'
       +'<td class="small">'+esc(s.custs&&s.custs.length? s.custs.map(function(p){return (p.num?p.num+' ':'')+p.nom;}).join(' · ') : '—')+'</td>'
       +'<td class="right small">'+(s.monto>0?money(s.monto):'auto')+'</td></tr>';
   }).join('') || '<tr><td colspan="7" class="empty">No se detectaron servicios. Revisa que la hoja tenga encabezados.</td></tr>';
   return '<div class="card"><div class="card-h"><h2>Columnas detectadas</h2></div><div style="display:flex;flex-wrap:wrap;gap:6px">'+detect+'</div>'+custInfo
-    +'<div class="small muted" style="margin-top:10px">Se importarán <b>'+S.length+'</b> servicios. Salida de base y liberación quedan vacías para que las completes y se calcule el viático. Las filas con monto entran con importe manual.</div></div>'
+    +'<div class="small muted" style="margin-top:10px">Se importarán <b>'+S.length+'</b> servicios con fecha de inicio, fecha de fin, hora de inicio y hora de término tomadas directo del Excel para calcular el viático. Las filas con monto entran con importe manual.</div></div>'
     +'<div class="card"><div class="card-h"><h2>Vista previa</h2><div class="grow"></div><button class="btn btn-primary" onclick="confirmarImport()">Importar '+S.length+' servicios</button></div>'
-    +'<div class="tbl-wrap"><table><thead><tr><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Fecha</th><th>Inicio/Término</th><th>Custodio</th><th class="right">Monto</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Fechas</th><th>Inicio/Término</th><th>Custodio</th><th class="right">Monto</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div class="small muted" style="margin-top:8px">Mostrando primeras 10 de '+S.length+'.</div></div>';
 }
 /* ====================================================================
@@ -2137,10 +2141,11 @@ function _finalizarServicios(){
     (s.custs||[]).forEach(function(p){ var id=resolveCust(p); if(id && custIds.indexOf(id)<0) custIds.push(id); });
     var zona=esExencionCdmxEdomex(s.estadoOrigen,s.estadoDestino)?'local':zonaSugerida(s.estadoOrigen,s.estadoDestino,s.origen,s.destino);
     var fecha=s.fecha || defaultFecha();
+    var fechaFin=s.fechaFin || fecha;
     DB.servicios.push(stamp({
       id:uid(), cons:s.cons, tipo:s.tipo, clienteId:clienteId, fecha:fecha, concepto:'operativo', base:'', estatusPago:'pendiente',
       origen:s.origen, estadoOrigen:s.estadoOrigen, destino:s.destino, estadoDestino:s.estadoDestino, zona:zona, obs:s.obs,
-      fechaInicio:fecha, horaInicio:s.hInicio, fechaFin:fecha, horaFin:s.hTermino, horasTrayecto:0,
+      fechaInicio:fecha, horaInicio:s.hInicio, fechaFin:fechaFin, horaFin:s.hTermino, horasTrayecto:0,
       custodios: custIds, importeManual: s.monto>0?s.monto:null, importado:true
     },true));
     var mk=isoWeekKey(fecha); if(mk) meses[mk]=(meses[mk]||0)+1;
