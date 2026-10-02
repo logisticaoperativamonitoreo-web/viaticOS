@@ -470,9 +470,13 @@ function calcularImporte(horas, zona){
   if(horas==null || horas<=0) return { importe:0, reglas:['Sin horas registradas'] };
   var t = DB.tarifas[zona] || DB.tarifas.nacional;
   var imp=0, reglas=[];
-  imp += t.t1; reglas.push('Primer turno (0–12 h): '+money(t.t1));
-  if(horas>12){ imp+=t.ad; reglas.push('Horas adicionales (13–18 h): +'+money(t.ad)); }
-  if(horas>18){ imp+=t.t2; reglas.push('Segundo turno (19–24 h): +'+money(t.t2)); }
+  if(horas>18){
+    // Al llegar al segundo turno se cancelan primer turno y horas adicionales: solo aplica el segundo turno
+    imp = t.t2; reglas.push('Segundo turno (19–24 h): '+money(t.t2)+' (sustituye primer turno + adicional)');
+  } else {
+    imp += t.t1; reglas.push('Primer turno (0–12 h): '+money(t.t1));
+    if(horas>12){ imp+=t.ad; reglas.push('Horas adicionales (13–18 h): +'+money(t.ad)); }
+  }
   if(horas>24){
     var bloques=Math.ceil((horas-24)/6);
     imp+=bloques*t.bloque;
