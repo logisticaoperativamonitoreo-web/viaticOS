@@ -349,7 +349,17 @@ function persist(){
     SHARED_KEYS.forEach(function(k){ payload[k] = DB[k]; });
     payload._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
     payload._updatedBy = DB.user || '';
-    _docRef.set(payload, {merge:true}).catch(function(e){ toast('No se pudo guardar en la nube'); });
+    var _kb = 0;
+    try{ var _tmp={}; SHARED_KEYS.forEach(function(k){ _tmp[k]=DB[k]; }); _kb = Math.round(new Blob([JSON.stringify(_tmp)]).size/1024); }catch(e){}
+    if(_kb > 1000){
+      toast('No se pudo guardar en la nube: los datos pesan '+_kb+' KB y el límite de Firestore es 1024 KB por documento');
+      console.warn('[OpsControl] Documento demasiado grande:', _kb, 'KB');
+      return;
+    }
+    _docRef.set(payload, {merge:true}).catch(function(e){
+      console.error('[OpsControl] Error al guardar en la nube', e);
+      toast('No se pudo guardar en la nube ('+((e&&e.code)||'error')+') · '+_kb+' KB');
+    });
   }
 }
 
