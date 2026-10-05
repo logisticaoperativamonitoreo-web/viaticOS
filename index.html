@@ -217,6 +217,7 @@
     <div class="nav" data-page="fijos"><span class="ico">＄</span> Servicios fijos</div>
     <div class="nav" data-page="recargas"><span class="ico">☎</span> Recargas telefónicas <span class="badge hide" id="bdg-recargas">0</span></div>
     <div class="nav" data-page="incidencias"><span class="ico">⚑</span> Incidencias y ajustes <span class="badge hide" id="bdg-inci">0</span></div>
+    <div class="nav" data-page="casa"><span class="ico">⌂</span> Casa Querétaro</div>
     <div class="nav-group">Catálogos</div>
     <div class="nav" data-page="clientes"><span class="ico">▤</span> Clientes</div>
     <div class="nav" data-page="custodios"><span class="ico">☗</span> Custodios</div>
@@ -319,7 +320,7 @@ var TARIFAS_DEFAULT = {
 
 // ---- Almacenamiento ----
 var DB = {
-  clientes:[], custodios:[], servicios:[], fijos:[], recargas:[], incidencias:[],
+  clientes:[], custodios:[], servicios:[], fijos:[], recargas:[], incidencias:[], casa:[],
   tarifas:JSON.parse(JSON.stringify(TARIFAS_DEFAULT)), user:'Operador'
 };
 /* ---- Sincronización con Firestore (documento compartido) ----
@@ -538,6 +539,7 @@ var PAGE_META = {
   comprobante:['Comprobante de pago','Desglose detallado para el custodio'],
   reportes:['Reportes','Consulta, subtotales y exportación'],
   importar:['Importación masiva','Importar desde Excel'],
+  casa:['Casa Querétaro','Viático Casa de Descanso · entradas y salidas'],
   reglas:['Reglas de cálculo','Tarifas y políticas de gastos operativos']
 };
 var current='dashboard';
@@ -559,7 +561,7 @@ function irAPeriodo(mk){
 function render(){
   var fns={dashboard:viewDashboard,servicios:viewServicios,fijos:viewFijos,recargas:viewRecargas,
     incidencias:viewIncidencias,clientes:viewClientes,custodios:viewCustodios,comprobante:viewComprobante,
-    reportes:viewReportes,importar:viewImportar,reglas:viewReglas};
+    reportes:viewReportes,importar:viewImportar,reglas:viewReglas,casa:viewCasa};
   document.getElementById('content').innerHTML = (fns[current]||viewDashboard)();
   if(window['after_'+current]) window['after_'+current]();
   updateBadges();
@@ -597,6 +599,7 @@ function totalesPeriodo(){
     nServ++;
     if(s.estatusPago!=='pagado') pendPago+=c.importeTotal;
   });
+  casaPeriodo().forEach(function(s){ var c=calcularServicio(s); casa+=c.importeTotal; if(s.estatusPago!=='pagado') pendPago+=c.importeTotal; });
   var fijos=DB.fijos.filter(function(f){return inPeriod(f.fecha);}).reduce(function(a,f){return a+(+f.importe||0);},0);
   var recargas=DB.recargas.filter(function(r){return inPeriod(r.fecha);}).reduce(function(a,r){return a+(+r.monto||0);},0);
   var recargasPend=DB.recargas.filter(function(r){return inPeriod(r.fecha)&&r.pendiente;}).reduce(function(a,r){return a+(+r.monto||0);},0);
@@ -1566,7 +1569,8 @@ function comprobanteHTML(id){
   var cust=custodioById(id);
   var serv=DB.servicios.filter(function(s){return inPeriod(s.fecha)&&(s.custodios||[]).indexOf(id)>=0;});
   var operativos=serv.filter(function(s){return s.concepto!=='casa_descanso';});
-  var casa=serv.filter(function(s){return s.concepto==='casa_descanso';});
+  var casa=serv.filter(function(s){return s.concepto==='casa_descanso';})
+    .concat(casaPeriodo().filter(function(s){return s.custodios.indexOf(id)>=0;}));
   var fijos=DB.fijos.filter(function(f){return inPeriod(f.fecha)&&f.custodioId===id;});
   var recargas=DB.recargas.filter(function(r){return inPeriod(r.fecha)&&r.custodioId===id;});
   var inci=DB.incidencias.filter(function(x){return inPeriod(x.fecha)&&x.custodioId===id;});
@@ -1656,7 +1660,7 @@ function filtrarServicios(){
 function genReporte(){
   var serv=filtrarServicios();
   var oper=serv.filter(function(s){return s.concepto!=='casa_descanso';});
-  var casa=serv.filter(function(s){return s.concepto==='casa_descanso';});
+  var casa=serv.filter(function(s){return s.concepto==='casa_descanso';}).concat(casaFiltradaReporte());
   var subOper=oper.reduce(function(a,s){return a+calcularServicio(s).importeTotal;},0);
   var subCasa=casa.reduce(function(a,s){return a+calcularServicio(s).importeTotal;},0);
   var recargas=DB.recargas.filter(function(r){return inPeriod(r.fecha);});
@@ -1695,7 +1699,7 @@ function exportExcel(){
   var data=[];
 
   // 1) Servicios — se desglosa una fila por cada custodio del servicio
-  filtrarServicios().forEach(function(s){
+  filtrarServicios().concat(casaFiltradaReporte()).forEach(function(s){
     var c=calcularServicio(s);
     var base={
       Registro:'SERVICIO', Consecutivo:tipoInfo(s.tipo).key+s.cons, Fecha:s.fecha,
@@ -1940,10 +1944,245 @@ function previewCasaQro(p){
       +'<td class="right small"><b>'+money(c.importePorCustodio*(s.custs.length||0))+'</b></td></tr>';
   }).join('') || '<tr><td colspan="7" class="empty">No se encontraron registros.</td></tr>';
   var tot=S.reduce(function(a,s){ var c=calcularServicio({fechaInicio:s.fecha,horaInicio:s.hInicio,fechaFin:s.fechaFin,horaFin:s.hTermino,horasTrayecto:0,zona:'nacional',custodios:s.custs}); return a+c.importePorCustodio*(s.custs.length||0); },0);
-  return '<div class="card"><div class="card-h"><h2>Casa de Descanso Querétaro — vista previa ('+S.length+' estancias)</h2><div class="grow"></div><button class="btn btn-primary" onclick="confirmarImport()">Importar '+S.length+' estancias</button></div>'
+  return '<div class="card"><div class="card-h"><h2>Casa de Descanso Querétaro — vista previa ('+S.length+' estancias)</h2><div class="grow"></div><button class="btn btn-primary" onclick="casaConfirmarImport()">Importar '+S.length+' estancias</button></div>'
     +'<div class="small muted" style="margin-bottom:8px">Se calcula con las mismas tarifas (zona nacional) usando el tiempo de <b>H. ENTRADA → H. SALIDA</b>, por cada elemento. Se registran como <b>Viático Casa de Descanso</b> y se reportan por separado. Las estancias que ya existan (misma fecha, hora de entrada y elementos) no se duplican.</div>'
     +'<div class="tbl-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>No. ECO</th><th>Elementos</th><th class="right">Horas</th><th class="right">Por elemento</th><th class="right">Total</th></tr></thead><tbody>'+rows+'</tbody>'
     +'<tfoot><tr><td colspan="6" class="right"><b>Total estimado</b></td><td class="right"><b>'+money(tot)+'</b></td></tr></tfoot></table></div></div>';
+}
+
+/* ====================================================================
+   MÓDULO CASA DE DESCANSO QUERÉTARO
+   - Registros propios (DB.casa), sin consecutivo / tipo / cliente
+   - Nube: colección "casa_qro" (un documento por estancia), separada del
+     documento compartido/registros para no toparse con el límite de 1 MB
+   ==================================================================== */
+var _casaCol=null, _casaNubeLista=false, _casaErr='', _casaLocalOnly={}, _casaEdit=null;
+function casaArr(){ if(!DB.casa) DB.casa=[]; return DB.casa; }
+function casaLimpio(r){ var d=JSON.parse(JSON.stringify(r)); delete d.id; return d; }
+function casaGuardarNube(r){
+  if(!_casaCol){ _casaLocalOnly[r.id]=1; return; }
+  _casaCol.doc(r.id).set(casaLimpio(r)).then(function(){ delete _casaLocalOnly[r.id]; _casaErr=''; })
+    .catch(function(e){ _casaLocalOnly[r.id]=1; _casaErr=(e&&e.code)||'error';
+      toast('Casa Querétaro: no se subió a la nube ('+_casaErr+'). Quedó guardado en esta computadora.');
+      if(current==='casa'&&!_casaEdit) render(); });
+}
+function casaBorrarNube(id){ delete _casaLocalOnly[id]; if(_casaCol) _casaCol.doc(id).delete().catch(function(e){ toast('No se pudo borrar en la nube ('+((e&&e.code)||'error')+')'); }); }
+function escucharCasa(){
+  if(!_db) return;
+  _casaCol=_db.collection('casa_qro');
+  _casaCol.onSnapshot(function(snap){
+    var remotos=[], ids={};
+    snap.forEach(function(d){ var x=d.data()||{}; x.id=d.id; remotos.push(x); ids[d.id]=1; });
+    var primera=!_casaNubeLista; _casaNubeLista=true; _casaErr='';
+    casaArr().forEach(function(x){
+      if(ids[x.id]) return;
+      if(primera){ remotos.push(x); casaGuardarNube(x); }          // migración: subir lo que solo estaba local
+      else if(_casaLocalOnly[x.id]) remotos.push(x);              // no se pierde lo que falló al subir
+    });
+    DB.casa=remotos; guardarLocal();
+    if(_booted && !_casaEdit && ['casa','dashboard','comprobante','reportes'].indexOf(current)>=0) render();
+  }, function(err){
+    _casaErr=(err&&err.code)||'error';
+    toast('Casa Querétaro: sin conexión con la nube ('+_casaErr+')');
+    if(_booted&&current==='casa'&&!_casaEdit) render();
+  });
+}
+// Convierte una estancia en "servicio" para reutilizar el cálculo, comprobantes y reportes
+function casaComoServicio(r){
+  return { id:r.id, casa:true, concepto:'casa_descanso', tipo:'CASA', cons:'', clienteId:'',
+    fecha:r.fechaEntrada, fechaInicio:r.fechaEntrada, horaInicio:r.horaEntrada,
+    fechaFin:r.fechaSalida||r.fechaEntrada, horaFin:r.horaSalida, horasTrayecto:0, zona:'nacional',
+    origen:'Casa Querétaro', estadoOrigen:'Querétaro', destino:(r.eco?'Unidad '+r.eco:'—'), estadoDestino:'Querétaro',
+    custodios:r.custodios||[], estatusPago:r.estatusPago||'pendiente', obs:r.obs||'' };
+}
+function casaPeriodo(){ return casaArr().filter(function(r){return inPeriod(r.fechaEntrada);}).map(casaComoServicio); }
+function casaFiltradaReporte(){
+  var cust=(document.getElementById('rp-cust')||{}).value||'', tipo=(document.getElementById('rp-tipo')||{}).value||'', cli=(document.getElementById('rp-cliente')||{}).value||'';
+  if(tipo||cli) return [];
+  return casaPeriodo().filter(function(s){ return !cust || s.custodios.indexOf(cust)>=0; });
+}
+function _casaOrden(a,b){ return String((a.fechaEntrada||'')+(a.horaEntrada||'')).localeCompare(String((b.fechaEntrada||'')+(b.horaEntrada||''))); }
+function _custEtiqueta(id){ var c=custodioById(id); return c?((c.numEmpleado?c.numEmpleado+' ':'')+c.nombre):'(elemento borrado)'; }
+function _fFecha(f){ var m=String(f||'').match(/(\d{4})-(\d{2})-(\d{2})/); return m?(m[3]+'/'+m[2]):'—'; }
+
+function viewCasa(){
+  var lista=casaArr().filter(function(r){return inPeriod(r.fechaEntrada);}).sort(_casaOrden);
+  var pend=Object.keys(_casaLocalOnly).length;
+  var estado = !_modoNube ? '<span class="pill off">Solo en esta computadora</span>'
+    : _casaErr ? '<span class="pill warn">Sin sincronizar con la nube ('+esc(_casaErr)+')</span>'
+    : _casaNubeLista ? '<span class="pill ok">✓ Guardado en la nube</span>' : '<span class="pill off">Conectando…</span>';
+  if(pend && _modoNube && !_casaErr) estado+=' <span class="pill warn">'+pend+' por subir</span>';
+  var reglasNota = (_casaErr==='permission-denied')
+    ? '<div class="small" style="margin-top:8px;color:var(--danger)">Las reglas de Firestore no permiten esta colección. En Firebase → Firestore → Reglas agrega:<br><code>match /casa_qro/{id} { allow read, write: if request.auth != null; }</code></div>' : '';
+  var legacy=DB.servicios.filter(function(s){return s.concepto==='casa_descanso' && s.origen==='Casa de Descanso Querétaro';}).length;
+
+  var tot=0, porCust={};
+  var rows=lista.map(function(r){
+    var s=casaComoServicio(r), c=calcularServicio(s); tot+=c.importeTotal;
+    (r.custodios||[]).forEach(function(id){ var p=porCust[id]||(porCust[id]={n:0,h:0,imp:0}); p.n++; p.h+=(c.horasTotal||0); p.imp+=c.importePorCustodio; });
+    var aviso = (c.horasTotal==null||c.horasTotal<=0) ? ' <span class="pill warn">Revisar horas</span>' : '';
+    return '<tr><td class="small"><b>'+_fFecha(r.fechaEntrada)+'</b> '+esc(r.horaEntrada||'—')+'</td>'
+      +'<td class="small"><b>'+_fFecha(r.fechaSalida)+'</b> '+esc(r.horaSalida||'—')+'</td>'
+      +'<td class="small">'+esc(r.eco||'—')+'</td>'
+      +'<td class="small">'+((r.custodios||[]).map(function(id){return esc(_custEtiqueta(id));}).join('<br>')||'<span class="pill warn">Sin elementos</span>')+'</td>'
+      +'<td class="right small">'+(c.horasTotal!=null?fmtH(c.horasTotal):'—')+aviso+'</td>'
+      +'<td class="small muted">'+esc(c.reglas.join(' · '))+'</td>'
+      +'<td class="right small">'+money(c.importePorCustodio)+'</td>'
+      +'<td class="right"><b>'+money(c.importeTotal)+'</b></td>'
+      +'<td class="small">'+(r.estatusPago==='pagado'?'<span class="pill ok">Pagado</span>':'<span class="pill warn">Pendiente</span>')+'</td>'
+      +'<td class="right" style="white-space:nowrap"><button class="btn btn-sm" onclick="casaEditar(\''+r.id+'\')">Editar</button> <button class="btn btn-sm btn-danger" onclick="casaBorrar(\''+r.id+'\')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="10" class="empty">No hay estancias en esta semana. Importa el Excel o agrega una.</td></tr>';
+
+  var resumen=Object.keys(porCust).sort(function(a,b){ return porCust[b].imp-porCust[a].imp; }).map(function(id){ var p=porCust[id];
+    return '<tr><td>'+esc(_custEtiqueta(id))+'</td><td class="right">'+p.n+'</td><td class="right">'+fmtH(p.h)+'</td><td class="right"><b>'+money(p.imp)+'</b></td></tr>'; }).join('');
+
+  return ''
+  + '<div class="card"><div class="card-h"><h2>Casa de Descanso Querétaro</h2><div class="grow"></div>'
+  +   '<button class="btn btn-accent" onclick="casaNueva()">+ Agregar estancia</button> '
+  +   '<label class="btn">⇪ Importar Excel<input type="file" id="im-file-casa" accept=".xlsx,.xls,.csv" style="display:none" onchange="casaPrevisualizar(this)"></label> '
+  +   '<button class="btn" onclick="casaExportar()">Exportar Excel</button></div>'
+  +   '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+estado+'<span class="muted small">Semana: '+periodLabel()+' · se toma la fecha de entrada.</span></div>'+reglasNota
+  +   (legacy?'<div class="small" style="margin-top:10px">Hay <b>'+legacy+'</b> estancia(s) de Casa que quedaron en Registro de servicios. <button class="btn btn-sm" onclick="casaMigrar()">Pasarlas a este módulo</button></div>':'')
+  + '</div>'
+  + '<div id="im-prev"></div>'
+  + (_casaEdit?casaFormHTML():'')
+  + '<div class="kpis">'+kpi('Estancias de la semana',lista.length,'Registros de entrada/salida','')+kpi('Elementos',Object.keys(porCust).length,'Distintos en la semana','')+kpi('Total Casa Querétaro',money(tot),'Viático casa de descanso','okk')+'</div>'
+  + '<div class="card"><div class="card-h"><h2>Estancias</h2></div><div class="tbl-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>No. ECO</th><th>Elementos</th><th class="right">Horas</th><th>Regla</th><th class="right">Por elemento</th><th class="right">Total</th><th>Pago</th><th></th></tr></thead><tbody>'+rows+'</tbody>'
+  +   (lista.length?'<tfoot><tr><td colspan="7" class="right"><b>Total</b></td><td class="right"><b>'+money(tot)+'</b></td><td colspan="2"></td></tr></tfoot>':'')+'</table></div></div>'
+  + (resumen?'<div class="card"><div class="card-h"><h2>Resumen por elemento</h2></div><div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th class="right">Estancias</th><th class="right">Horas</th><th class="right">Importe</th></tr></thead><tbody>'+resumen+'</tbody></table></div></div>':'');
+}
+function casaFormHTML(){
+  var r = _casaEdit==='nuevo' ? {fechaEntrada:defaultFecha(),fechaSalida:'',horaEntrada:'',horaSalida:'',eco:'',custodios:[],estatusPago:'pendiente',obs:''}
+        : (casaArr().find(function(x){return x.id===_casaEdit;})||{});
+  var sel=r.custodios||[];
+  var custs=DB.custodios.filter(function(c){ return c.activo!==false || sel.indexOf(c.id)>=0; })
+    .sort(function(a,b){ var sa=sel.indexOf(a.id)>=0?0:1, sb=sel.indexOf(b.id)>=0?0:1; if(sa!==sb) return sa-sb; return String(a.numEmpleado||'').localeCompare(String(b.numEmpleado||''),'es',{numeric:true}); });
+  var picker=custs.map(function(c){ var on=sel.indexOf(c.id)>=0;
+    return '<label class="cust-opt'+(on?' on':'')+'"><input type="checkbox" value="'+c.id+'"'+(on?' checked':'')+' onchange="this.closest(\'.cust-opt\').classList.toggle(\'on\',this.checked);casaRecalc()"> '+esc((c.numEmpleado?c.numEmpleado+' ':'')+c.nombre)+'</label>'; }).join('');
+  return '<div class="card" style="border:2px solid var(--accent)"><div class="card-h"><h2>'+(_casaEdit==='nuevo'?'Nueva estancia':'Editar estancia')+'</h2></div>'
+  + '<div class="grid g4">'
+  +   '<div><label class="fl">Fecha entrada</label><input class="inp" type="date" id="cq-fe" value="'+esc(r.fechaEntrada||'')+'" oninput="casaRecalc()"></div>'
+  +   '<div><label class="fl">Hora entrada</label><input class="inp" type="time" id="cq-he" value="'+esc(r.horaEntrada||'')+'" oninput="casaRecalc()"></div>'
+  +   '<div><label class="fl">Fecha salida</label><input class="inp" type="date" id="cq-fs" value="'+esc(r.fechaSalida||'')+'" oninput="casaRecalc()"></div>'
+  +   '<div><label class="fl">Hora salida</label><input class="inp" type="time" id="cq-hs" value="'+esc(r.horaSalida||'')+'" oninput="casaRecalc()"></div>'
+  + '</div><div class="grid g3" style="margin-top:12px">'
+  +   '<div><label class="fl">No. ECO (unidad)</label><input class="inp" id="cq-eco" value="'+esc(r.eco||'')+'"></div>'
+  +   '<div><label class="fl">Estatus de pago</label>'+selectHTML('cq-pago',[{v:'pendiente',l:'Pendiente'},{v:'pagado',l:'Pagado'}],r.estatusPago||'pendiente')+'</div>'
+  +   '<div><label class="fl">Observaciones</label><input class="inp" id="cq-obs" value="'+esc(r.obs||'')+'"></div>'
+  + '</div>'
+  + '<label class="fl" style="margin-top:12px">Elementos</label>'
+  + '<input class="inp" id="cq-q" placeholder="🔍 Buscar elemento por nombre o número…" autocomplete="off" oninput="casaFiltrarCust()" style="max-width:420px;margin-bottom:8px">'
+  + '<div class="cust-pick" id="cq-custs" style="max-height:200px;overflow:auto;padding:2px">'+(picker||'<span class="muted small">No hay elementos en el catálogo.</span>')+'</div>'
+  + '<div id="cq-calc" class="evi" style="margin-top:14px"></div>'
+  + '<div style="margin-top:14px;display:flex;gap:10px"><button class="btn btn-primary" onclick="casaGuardar()">Guardar</button><button class="btn" onclick="casaCancelar()">Cancelar</button></div>'
+  + '</div>';
+}
+function after_casa(){ if(_casaEdit) casaRecalc(); }
+function casaFiltrarCust(){ var q=nrm(document.getElementById('cq-q').value); document.querySelectorAll('#cq-custs .cust-opt').forEach(function(el){ el.style.display=(!q||nrm(el.textContent).indexOf(q)>=0)?'':'none'; }); }
+function casaLeerForm(){
+  return { fechaEntrada:document.getElementById('cq-fe').value, horaEntrada:document.getElementById('cq-he').value,
+    fechaSalida:document.getElementById('cq-fs').value||document.getElementById('cq-fe').value, horaSalida:document.getElementById('cq-hs').value,
+    eco:document.getElementById('cq-eco').value.trim(), estatusPago:document.getElementById('cq-pago').value||'pendiente',
+    obs:document.getElementById('cq-obs').value.trim(),
+    custodios:Array.prototype.slice.call(document.querySelectorAll('#cq-custs input:checked')).map(function(i){return i.value;}) };
+}
+function casaRecalc(){
+  var el=document.getElementById('cq-calc'); if(!el) return;
+  var f=casaLeerForm(), c=calcularServicio(casaComoServicio(f));
+  el.innerHTML='<div class="row"><span class="k">Horas en casa</span><span class="v">'+(c.horasTotal!=null?fmtH(c.horasTotal):'—')+'</span></div>'
+    +'<div class="row"><span class="k">Regla</span><span class="v small">'+esc(c.reglas.join(' · '))+'</span></div>'
+    +'<div class="row"><span class="k">Por elemento</span><span class="v">'+money(c.importePorCustodio)+'</span></div>'
+    +'<div class="total"><span>Total ('+f.custodios.length+' elemento'+(f.custodios.length===1?'':'s')+')</span><span>'+money(c.importeTotal)+'</span></div>';
+}
+function casaNueva(){ _casaEdit='nuevo'; render(); window.scrollTo(0,0); }
+function casaEditar(id){ _casaEdit=id; render(); window.scrollTo(0,0); }
+function casaCancelar(){ _casaEdit=null; render(); }
+function casaGuardar(){
+  var f=casaLeerForm();
+  if(!f.fechaEntrada||!f.horaEntrada||!f.horaSalida){ toast('Faltan: fecha y hora de entrada, y hora de salida'); return; }
+  if(!f.custodios.length){ toast('Selecciona al menos un elemento'); return; }
+  var c=calcularServicio(casaComoServicio(f));
+  if(c.horasTotal==null||c.horasTotal<=0){ toast('La salida debe ser posterior a la entrada'); return; }
+  var r;
+  if(_casaEdit==='nuevo'){ r=f; r.id=uid(); stamp(r,true); casaArr().push(r); }
+  else { r=casaArr().find(function(x){return x.id===_casaEdit;}); if(!r){ _casaEdit=null; render(); return; } for(var k in f) r[k]=f[k]; stamp(r,false); }
+  _casaEdit=null; guardarLocal(); casaGuardarNube(r); toast('Estancia guardada'); render();
+}
+function casaBorrar(id){
+  if(!confirm('¿Borrar esta estancia?')) return;
+  DB.casa=casaArr().filter(function(x){return x.id!==id;}); guardarLocal(); casaBorrarNube(id); render();
+}
+function casaPrevisualizar(inp){
+  var f=inp&&inp.files&&inp.files[0]; if(!f) return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+      _parsed=parseCasaQro(aoa);
+      document.getElementById('im-prev').innerHTML=previewCasaQro(_parsed);
+    }catch(err){ document.getElementById('im-prev').innerHTML='<div class="card"><div class="empty">No se pudo leer el archivo. ('+esc(err.message||err)+')</div></div>'; }
+    inp.value='';
+  };
+  reader.readAsArrayBuffer(f);
+}
+function casaConfirmarImport(){
+  if(!_parsed||!_parsed.servicios||!_parsed.servicios.length){ toast('No hay estancias para importar'); return; }
+  _decCliente={}; _decCust={};
+  var all=[]; _parsed.servicios.forEach(function(s){ (s.custs||[]).forEach(function(p){ all.push(p); }); });
+  var conf=escanear('custodio',distinctCust(all));
+  if(conf.length){ pedirRevision(conf,_finalizarCasa); return; }
+  _finalizarCasa();
+}
+function _finalizarCasa(){
+  var n=0, dup=0, semanas={}, existentes={};
+  casaArr().forEach(function(x){ existentes[_claveCasa(x.fechaEntrada,x.horaEntrada,x.custodios||[])]=1; });
+  _parsed.servicios.forEach(function(s){
+    var ids=[]; (s.custs||[]).forEach(function(p){ var id=resolveCust(p); if(id&&ids.indexOf(id)<0) ids.push(id); });
+    var k=_claveCasa(s.fecha,s.hInicio,ids); if(existentes[k]){ dup++; return; } existentes[k]=1;
+    var sup=String(s.obs||'').match(/Supervisor:\s*(.+)$/);
+    var r=stamp({ id:uid(), fechaEntrada:s.fecha, horaEntrada:s.hInicio, fechaSalida:s.fechaFin||s.fecha, horaSalida:s.hTermino,
+      eco:s.eco||'', custodios:ids, estatusPago:'pendiente', obs:sup?('Supervisor: '+sup[1].trim()):'', importado:true },true);
+    casaArr().push(r); casaGuardarNube(r);
+    var wk=isoWeekKey(s.fecha); if(wk) semanas[wk]=(semanas[wk]||0)+1; n++;
+  });
+  guardarLocal(); _parsed=null;
+  var best=null,bn=-1; for(var w in semanas){ if(semanas[w]>bn){bn=semanas[w];best=w;} }
+  var per=document.getElementById('period'); if(best && per && !semanas[per.value]){ per.type='week'; per.value=best; }
+  toast('Casa Querétaro: '+n+' estancias importadas'+(dup?(' · '+dup+' ya existían'):''));
+  _casaEdit=null; nav('casa');
+}
+function casaMigrar(){
+  var mover=DB.servicios.filter(function(s){return s.concepto==='casa_descanso' && s.origen==='Casa de Descanso Querétaro';});
+  if(!mover.length) return;
+  if(!confirm('¿Pasar '+mover.length+' estancia(s) de Registro de servicios al módulo Casa Querétaro?')) return;
+  mover.forEach(function(s){
+    var m=String(s.obs||'').match(/Unidad:\s*([^·]+)/);
+    var r=stamp({ id:uid(), fechaEntrada:s.fechaInicio||s.fecha, horaEntrada:s.horaInicio||'', fechaSalida:s.fechaFin||s.fechaInicio||s.fecha, horaSalida:s.horaFin||'',
+      eco:m?m[1].trim():'', custodios:s.custodios||[], estatusPago:s.estatusPago||'pendiente', obs:'', importado:true },true);
+    casaArr().push(r); casaGuardarNube(r);
+  });
+  var ids={}; mover.forEach(function(s){ids[s.id]=1;});
+  DB.servicios=DB.servicios.filter(function(s){return !ids[s.id];});
+  persist(); toast('Movidas '+mover.length+' estancias'); render();
+}
+function casaExportar(){
+  if(typeof XLSX==='undefined'){ toast('La librería de Excel no cargó'); return; }
+  var data=[];
+  casaArr().filter(function(r){return inPeriod(r.fechaEntrada);}).sort(_casaOrden).forEach(function(r){
+    var c=calcularServicio(casaComoServicio(r));
+    (r.custodios||[]).forEach(function(id){ var cu=custodioById(id)||{};
+      data.push({'Fecha entrada':r.fechaEntrada,'Hora entrada':r.horaEntrada,'Fecha salida':r.fechaSalida,'Hora salida':r.horaSalida,
+        'No. ECO':r.eco||'','No. empleado':cu.numEmpleado||'','Elemento':cu.nombre||'',
+        'Horas':(c.horasTotal!=null?+c.horasTotal.toFixed(2):''),'Regla':c.reglas.join(' | '),'Importe':c.importePorCustodio,
+        'Estatus':r.estatusPago==='pagado'?'Pagado':'Pendiente','Obs':r.obs||''});
+    });
+  });
+  if(data.length) data.push({'Elemento':'TOTAL','Importe':data.reduce(function(a,x){return a+(+x.Importe||0);},0)});
+  var ws=XLSX.utils.json_to_sheet(data.length?data:[{'Fecha entrada':'Sin datos'}]);
+  ws['!cols']=[{wch:12},{wch:10},{wch:12},{wch:10},{wch:9},{wch:11},{wch:34},{wch:8},{wch:40},{wch:10},{wch:10},{wch:24}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Casa Querétaro');
+  XLSX.writeFile(wb,'Casa_Queretaro_'+(periodVal()||'todo')+'.xlsx');
 }
 
 var _importRows=[], _parsed=null;
@@ -2193,7 +2432,8 @@ function aplicarRevision(){
 function confirmarImport(){
   var tipo=document.getElementById('im-tipo').value;
   _decCliente={}; _decCust={};
-  if(tipo==='servicios' || tipo==='casa'){
+  if(tipo==='casa'){ casaConfirmarImport(); return; }
+  if(tipo==='servicios'){
     if(!_parsed||!_parsed.servicios.length){ toast('No hay servicios para importar'); return; }
     var cl=distinctClientes(_parsed.servicios.map(function(s){return s.clienteNom;}));
     var allCust=[]; _parsed.servicios.forEach(function(s){ (s.custs||[]).forEach(function(p){ allCust.push(p); }); });
@@ -2428,7 +2668,7 @@ function iniciar(){
       ocultarGate();
       bootApp();
       var who=document.getElementById('who'); if(who) who.textContent=DB.user;
-      if(_db){ escucharNube(); }   // sincronización en tiempo real con compartido/registros
+      if(_db){ escucharNube(); escucharCasa(); }   // sincronización en tiempo real con compartido/registros
       render();
     }else{
       _modoNube = false; _nubeLista = false; _docRef = null;
