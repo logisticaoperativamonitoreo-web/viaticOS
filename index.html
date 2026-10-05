@@ -1774,7 +1774,7 @@ function viewImportar(){
   + '<div class="card"><div class="card-h"><h2>Importar desde Excel</h2></div>'
   +   '<p class="muted small">Sube la descarga de tu hoja de Drive (.xlsx o .csv). El sistema detecta los encabezados, mapea las columnas y crea los clientes y custodios que no existan. Tú solo editas lo que falte (salida de base y liberación) para que se dispare el cálculo.</p>'
   +   '<div class="grid g2">'
-  +     '<div><label class="fl">¿Qué vas a importar?</label>'+selectHTML('im-tipo',[{v:'servicios',l:'Servicios (hoja de asignación)'},{v:'clientes',l:'Clientes'},{v:'custodios',l:'Custodios'},{v:'recargas',l:'Recargas'}],'servicios','previsualizar()')+'</div>'
+  +     '<div><label class="fl">¿Qué vas a importar?</label>'+selectHTML('im-tipo',[{v:'servicios',l:'Servicios (hoja de asignación)'},{v:'casa',l:'Casa de Descanso Querétaro (registro de elementos)'},{v:'clientes',l:'Clientes'},{v:'custodios',l:'Custodios'},{v:'recargas',l:'Recargas'}],'servicios','previsualizar()')+'</div>'
   +     '<div><label class="fl">Archivo (.xlsx / .csv)</label><input class="inp" type="file" id="im-file" accept=".xlsx,.xls,.csv" onchange="previsualizar()"></div>'
   +   '</div>'
   +   '<div id="im-prev" style="margin-top:16px"></div>'
@@ -1885,6 +1885,67 @@ function parseServicios(aoa){
   return { idx:idx, servicios:out };
 }
 
+/* ---- Casa de Descanso Querétaro: "INGRESO DE PERSONAL A CASA QUERETARO" ----
+   Columnas: FECHA | No. ECO | ELEMENTO | ELEMENTO | H. ENTRADA | FECHA /SALIDA | H. SALIDA */
+function parseCasaQro(aoa){
+  var hr=-1;
+  for(var r=0;r<Math.min(aoa.length,15);r++){
+    var t=(aoa[r]||[]).map(nrm).join('|');
+    if(t.indexOf('entrada')>=0 && t.indexOf('salida')>=0){ hr=r; break; }
+  }
+  if(hr<0) return {error:'No se encontró el encabezado (FECHA, ELEMENTO, H. ENTRADA, FECHA/SALIDA, H. SALIDA).', servicios:[]};
+  var H=aoa[hr], idx={elem:[]};
+  for(var i=0;i<H.length;i++){
+    var h=nrm(H[i]); if(!h) continue;
+    if(h.indexOf('salida')>=0 && h.indexOf('fecha')>=0) idx.fSal=i;
+    else if(h.indexOf('salida')>=0) idx.hSal=i;
+    else if(h.indexOf('entrada')>=0) idx.hEnt=i;
+    else if(h.indexOf('fecha')>=0 && idx.fEnt==null) idx.fEnt=i;
+    else if(h.indexOf('eco')>=0) idx.eco=i;
+    else if(h.indexOf('elemento')>=0||h.indexOf('custodio')>=0) idx.elem.push(i);
+  }
+  var sup=''; for(var r2=0;r2<hr;r2++){ var row0=aoa[r2]||[]; for(var c=0;c<row0.length;c++){ if(nrm(row0[c]).indexOf('supervisor')>=0){ for(var c2=c+1;c2<row0.length;c2++){ if(String(row0[c2]||'').trim()){ sup=String(row0[c2]).trim(); break; } } } } }
+  var out=[];
+  for(var r3=hr+1;r3<aoa.length;r3++){
+    var row=aoa[r3]||[];
+    var custs=[];
+    idx.elem.forEach(function(ci){ splitCustCell(row[ci]).forEach(function(piece){ var p=parseCust(piece); if(p.num||p.nom) custs.push(p); }); });
+    var fe=aFecha(row[idx.fEnt]);
+    if(!fe && !custs.length) continue;
+    var vistos={}; custs=custs.filter(function(p){ var k=p.num?('n:'+p.num):('x:'+nrmNombre(p.nom)); if(vistos[k]) return false; vistos[k]=1; return true; });
+    var eco=String(idx.eco!=null&&row[idx.eco]!=null?row[idx.eco]:'').trim();
+    var obs=['Casa de Descanso Querétaro']; if(eco) obs.push('Unidad: '+eco); if(sup) obs.push('Supervisor: '+sup);
+    out.push({
+      cons:'', tipo:'', clienteNom:'', origen:'Casa de Descanso Querétaro', estadoOrigen:'Querétaro', destino:'Casa de Descanso Querétaro', estadoDestino:'Querétaro',
+      fecha:fe, fechaFin:aFecha(row[idx.fSal])||fe, hInicio:aHora(row[idx.hEnt]), hTermino:aHora(row[idx.hSal]),
+      cust:custs[0]||{num:'',nom:''}, custs:custs, monto:0, obs:obs.join(' · '),
+      concepto:'casa_descanso', base:'Querétaro (Casa de Descanso)', zona:'nacional', eco:eco
+    });
+  }
+  return {idx:idx, servicios:out, casa:true};
+}
+function _claveCasa(fecha,hIni,custIds){ return [fecha,hIni,custIds.slice().sort().join(',')].join('|'); }
+function previewCasaQro(p){
+  if(p.error) return '<div class="card"><div class="empty">'+esc(p.error)+'</div></div>';
+  var S=p.servicios;
+  var rows=S.map(function(s){
+    var tmp={fechaInicio:s.fecha,horaInicio:s.hInicio,fechaFin:s.fechaFin,horaFin:s.hTermino,horasTrayecto:0,zona:'nacional',custodios:s.custs};
+    var c=calcularServicio(tmp);
+    return '<tr><td class="small">'+esc(s.fecha)+' '+esc(s.hInicio||'—')+'</td>'
+      +'<td class="small">'+esc(s.fechaFin)+' '+esc(s.hTermino||'—')+'</td>'
+      +'<td class="small">'+esc(s.eco||'—')+'</td>'
+      +'<td class="small">'+esc(s.custs.map(function(x){return (x.num?x.num+' ':'')+x.nom;}).join(' · ')||'—')+'</td>'
+      +'<td class="right small">'+(c.horasTotal!=null?fmtH(c.horasTotal):'—')+'</td>'
+      +'<td class="right small">'+money(c.importePorCustodio)+'</td>'
+      +'<td class="right small"><b>'+money(c.importePorCustodio*(s.custs.length||0))+'</b></td></tr>';
+  }).join('') || '<tr><td colspan="7" class="empty">No se encontraron registros.</td></tr>';
+  var tot=S.reduce(function(a,s){ var c=calcularServicio({fechaInicio:s.fecha,horaInicio:s.hInicio,fechaFin:s.fechaFin,horaFin:s.hTermino,horasTrayecto:0,zona:'nacional',custodios:s.custs}); return a+c.importePorCustodio*(s.custs.length||0); },0);
+  return '<div class="card"><div class="card-h"><h2>Casa de Descanso Querétaro — vista previa ('+S.length+' estancias)</h2><div class="grow"></div><button class="btn btn-primary" onclick="confirmarImport()">Importar '+S.length+' estancias</button></div>'
+    +'<div class="small muted" style="margin-bottom:8px">Se calcula con las mismas tarifas (zona nacional) usando el tiempo de <b>H. ENTRADA → H. SALIDA</b>, por cada elemento. Se registran como <b>Viático Casa de Descanso</b> y se reportan por separado. Las estancias que ya existan (misma fecha, hora de entrada y elementos) no se duplican.</div>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>No. ECO</th><th>Elementos</th><th class="right">Horas</th><th class="right">Por elemento</th><th class="right">Total</th></tr></thead><tbody>'+rows+'</tbody>'
+    +'<tfoot><tr><td colspan="6" class="right"><b>Total estimado</b></td><td class="right"><b>'+money(tot)+'</b></td></tr></tfoot></table></div></div>';
+}
+
 var _importRows=[], _parsed=null;
 function previsualizar(){
   var f=document.getElementById('im-file'); if(!f||!f.files[0]){ document.getElementById('im-prev').innerHTML=''; return; }
@@ -1892,9 +1953,21 @@ function previsualizar(){
   var reader=new FileReader();
   reader.onload=function(e){
     try{
+      if(tipo==='casa'){
+        var wbC=XLSX.read(e.target.result,{type:'array'});
+        var aoaC=XLSX.utils.sheet_to_json(wbC.Sheets[wbC.SheetNames[0]],{header:1,defval:''});
+        _parsed=parseCasaQro(aoaC);
+        document.getElementById('im-prev').innerHTML=previewCasaQro(_parsed);
+        return;
+      }
       var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
       var ws=wb.Sheets[wb.SheetNames[0]];
       if(tipo==='servicios'){
+        var aoaT=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        var txt=aoaT.slice(0,10).map(function(r){return (r||[]).map(nrm).join('|');}).join('|');
+        if(txt.indexOf('casa queretaro')>=0 || (txt.indexOf('h. entrada')>=0 && txt.indexOf('h. salida')>=0)){
+          document.getElementById('im-tipo').value='casa'; previsualizar(); return;
+        }
         var aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
         _parsed=parseServicios(aoa);
         document.getElementById('im-prev').innerHTML=previewServicios(_parsed);
@@ -2120,7 +2193,7 @@ function aplicarRevision(){
 function confirmarImport(){
   var tipo=document.getElementById('im-tipo').value;
   _decCliente={}; _decCust={};
-  if(tipo==='servicios'){
+  if(tipo==='servicios' || tipo==='casa'){
     if(!_parsed||!_parsed.servicios.length){ toast('No hay servicios para importar'); return; }
     var cl=distinctClientes(_parsed.servicios.map(function(s){return s.clienteNom;}));
     var allCust=[]; _parsed.servicios.forEach(function(s){ (s.custs||[]).forEach(function(p){ allCust.push(p); }); });
@@ -2148,16 +2221,23 @@ function confirmarImport(){
 }
 
 function _finalizarServicios(){
-  var n=0, meses={};
+  var n=0, dup=0, meses={};
+  var existentes={};
+  DB.servicios.forEach(function(x){ if(x.concepto==='casa_descanso') existentes[_claveCasa(x.fechaInicio||x.fecha,x.horaInicio,x.custodios||[])]=1; });
   _parsed.servicios.forEach(function(s){
-    var clienteId=resolveCliente(s.clienteNom);
+    var clienteId=s.clienteNom?resolveCliente(s.clienteNom):'';
     var custIds=[];
     (s.custs||[]).forEach(function(p){ var id=resolveCust(p); if(id && custIds.indexOf(id)<0) custIds.push(id); });
-    var zona=esExencionCdmxEdomex(s.estadoOrigen,s.estadoDestino)?'local':zonaSugerida(s.estadoOrigen,s.estadoDestino,s.origen,s.destino);
+    var zona=s.zona || (esExencionCdmxEdomex(s.estadoOrigen,s.estadoDestino)?'local':zonaSugerida(s.estadoOrigen,s.estadoDestino,s.origen,s.destino));
     var fecha=s.fecha || defaultFecha();
     var fechaFin=s.fechaFin || fecha;
+    if(s.concepto==='casa_descanso'){
+      var k=_claveCasa(fecha,s.hInicio,custIds);
+      if(existentes[k]){ dup++; return; }
+      existentes[k]=1;
+    }
     DB.servicios.push(stamp({
-      id:uid(), cons:s.cons, tipo:s.tipo, clienteId:clienteId, fecha:fecha, concepto:'operativo', base:'', estatusPago:'pendiente',
+      id:uid(), cons:s.cons, tipo:s.tipo, clienteId:clienteId, fecha:fecha, concepto:s.concepto||'operativo', base:s.base||'', estatusPago:'pendiente',
       origen:s.origen, estadoOrigen:s.estadoOrigen, destino:s.destino, estadoDestino:s.estadoDestino, zona:zona, obs:s.obs,
       fechaInicio:fecha, horaInicio:s.hInicio, fechaFin:fechaFin, horaFin:s.hTermino, horasTrayecto:0,
       custodios: custIds, importeManual: s.monto>0?s.monto:null, importado:true
@@ -2171,7 +2251,7 @@ function _finalizarServicios(){
   var cur=periodVal();
   if(!meses[cur]){ var best=null,bn=-1; for(var mk in meses){ if(meses[mk]>bn){bn=meses[mk];best=mk;} } if(best) document.getElementById('period').value=best; }
   var resumen=Object.keys(meses).sort().map(function(m){ return m+': '+meses[m]; }).join(' · ');
-  toast('Importados '+n+' servicios ('+resumen+')');
+  toast('Importados '+n+' servicios ('+resumen+')'+(dup?(' · '+dup+' ya existían y se omitieron'):''));
   nav('servicios');
 }
 
