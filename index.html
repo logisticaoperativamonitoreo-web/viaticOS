@@ -209,7 +209,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">OC</div>
-      <div><b>OpsControl</b><span>Gastos operativos</span></div>
+      <div><b>OpsControl</b><span>Gastos operativos · v18.4</span></div>
     </div>
     <div class="nav-group">Operación</div>
     <div class="nav active" data-page="dashboard"><span class="ico">▦</span> Dashboard</div>
@@ -323,16 +323,23 @@ var DB = {
   clientes:[], custodios:[], servicios:[], fijos:[], recargas:[], incidencias:[], casa:[],
   tarifas:JSON.parse(JSON.stringify(TARIFAS_DEFAULT)), user:'Operador'
 };
-/* ---- Sincronización con Firestore (documento compartido) ----
-   Modelo: todos los usuarios autenticados leen y escriben el mismo
-   documento  compartido/registros , con onSnapshot en tiempo real.
+/* ---- Sincronización con Firestore ----
+   - compartido/registros : catálogos, fijos, recargas, incidencias y tarifas (documento chico)
+   - colección "servicios": UN DOCUMENTO POR SERVICIO (sin límite de 1 MB en total)
+   - colección "casa_qro" : una estancia por documento (módulo Casa Querétaro)
    El localStorage queda solo como caché local de respaldo. */
-var SHARED_KEYS = ['clientes','custodios','servicios','fijos','recargas','incidencias','tarifas'];
+var SHARED_KEYS = ['clientes','custodios','fijos','recargas','incidencias','tarifas'];
 var _db = null;                 // instancia de Firestore
 var _docRef = null;             // referencia a compartido/registros
 var _modoNube = false;          // true cuando hay sesión y Firestore disponible
 var _nubeLista = false;         // true tras recibir el primer snapshot
 var _aplicandoSnapshot = false; // evita bucles de escritura al aplicar datos remotos
+// Servicios en colección propia
+var _servCol = null, _servLista = false, _servVacio = false, _servErr = '';
+var _servSync = {};             // id -> JSON de lo último que está en la nube
+var _servLocalOnly = {};        // ids que no se pudieron subir (se conservan)
+var _legacyServ = null;         // servicios que aún vienen en el documento viejo
+var _migrado = false;
 
 function load(){
   // Carga inicial desde la caché local (se reemplaza al llegar el primer snapshot de la nube)
@@ -353,15 +360,55 @@ function persist(){
     var _kb = 0;
     try{ var _tmp={}; SHARED_KEYS.forEach(function(k){ _tmp[k]=DB[k]; }); _kb = Math.round(new Blob([JSON.stringify(_tmp)]).size/1024); }catch(e){}
     if(_kb > 1000){
-      toast('No se pudo guardar en la nube: los datos pesan '+_kb+' KB y el límite de Firestore es 1024 KB por documento');
-      console.warn('[OpsControl] Documento demasiado grande:', _kb, 'KB');
-      return;
+      toast('No se pudo guardar en la nube: catálogos/recargas pesan '+_kb+' KB (límite 1024 KB)');
+    } else {
+      _docRef.set(payload, {merge:true}).catch(function(e){
+        console.error('[OpsControl] Error al guardar en la nube', e);
+        toast('No se pudo guardar en la nube ('+((e&&e.code)||'error')+')');
+      });
     }
-    _docRef.set(payload, {merge:true}).catch(function(e){
-      console.error('[OpsControl] Error al guardar en la nube', e);
-      toast('No se pudo guardar en la nube ('+((e&&e.code)||'error')+') · '+_kb+' KB');
-    });
   }
+  sincronizarServicios();
+}
+
+function _servDatos(s){ var d=JSON.parse(JSON.stringify(s)); delete d.id; return d; }
+// Sube solo los servicios nuevos o modificados y borra los eliminados (en lotes)
+function sincronizarServicios(){
+  if(!_modoNube || !_servCol || !_servLista || !_migrado) return Promise.resolve();
+  var ops=[], vivos={};
+  DB.servicios.forEach(function(s){
+    if(!s.id) s.id=uid();
+    vivos[s.id]=1;
+    var j=JSON.stringify(_servDatos(s));
+    if(_servSync[s.id]!==j) ops.push({t:'set', id:s.id, j:j});
+  });
+  Object.keys(_servSync).forEach(function(id){ if(!vivos[id]) ops.push({t:'del', id:id}); });
+  if(!ops.length) return Promise.resolve();
+  var lotes=[];
+  for(var i=0;i<ops.length;i+=400) lotes.push(ops.slice(i,i+400));
+  var promesas=lotes.map(function(lote){
+    var b=_db.batch();
+    lote.forEach(function(o){
+      if(o.t==='set'){ b.set(_servCol.doc(o.id), JSON.parse(o.j)); _servSync[o.id]=o.j; _servLocalOnly[o.id]=1; }
+      else { b.delete(_servCol.doc(o.id)); delete _servSync[o.id]; delete _servLocalOnly[o.id]; }
+    });
+    return b.commit().then(function(){
+      lote.forEach(function(o){ if(o.t==='set') delete _servLocalOnly[o.id]; });
+      _servErr='';
+    }).catch(function(e){
+      lote.forEach(function(o){ if(o.t==='set') delete _servSync[o.id]; });
+      _servErr=(e&&e.code)||'error';
+      console.error('[OpsControl] Error al guardar servicios', e);
+      toast('No se pudieron guardar servicios en la nube ('+_servErr+'). Siguen en esta computadora.');
+    });
+  });
+  return Promise.all(promesas);
+}
+
+function _formEnUso(){
+  var a=document.activeElement; if(!a) return false;
+  var t=(a.tagName||'').toLowerCase();
+  return (t==='input'||t==='select'||t==='textarea') && a.type!=='file' && a.id!=='period';
 }
 
 function escucharNube(){
@@ -372,6 +419,7 @@ function escucharNube(){
     if(snap.exists){
       var d = snap.data() || {};
       SHARED_KEYS.forEach(function(k){ if(d[k]!==undefined && d[k]!==null) DB[k]=d[k]; });
+      _legacyServ = (d.servicios && d.servicios.length) ? d.servicios : null;
     }
     if(!DB.tarifas) DB.tarifas=JSON.parse(JSON.stringify(TARIFAS_DEFAULT));
     _aplicandoSnapshot = false;
@@ -380,18 +428,79 @@ function escucharNube(){
     guardarLocal();
     // Si el documento aún no existía, lo creamos con el estado actual (migración suave)
     if(primeraVez && (!snap || !snap.exists)) persist();
-    if(_booted) render();
+    if(primeraVez) _intentarMigrar();
+    if(_booted && !_formEnUso()) render();
   }, function(err){
     toast('Error de conexión con la nube'+(err&&err.code?(' ('+err.code+')'):''));
   });
+  escucharServicios();
+}
+
+function escucharServicios(){
+  _servCol = _db.collection('servicios');
+  _servCol.onSnapshot(function(snap){
+    var remotos=[], ids={};
+    snap.forEach(function(d){ var x=d.data()||{}; x.id=d.id; remotos.push(x); ids[d.id]=1; });
+    var primera=!_servLista; _servLista=true; _servErr='';
+    if(primera && !remotos.length){ _servVacio=true; _intentarMigrar(); return; }
+    if(primera) _migrado=true;
+    // Lo que no se pudo subir se queda (no se pierde)
+    DB.servicios.forEach(function(x){ if(!ids[x.id] && _servLocalOnly[x.id]) remotos.push(x); });
+    var sync={}; remotos.forEach(function(x){ if(!_servLocalOnly[x.id]) sync[x.id]=JSON.stringify(_servDatos(x)); });
+    _servSync=sync;
+    DB.servicios=remotos; guardarLocal();
+    if(primera && _nubeLista) _intentarMigrar();
+    if(_booted && !_formEnUso()) render();
+  }, function(err){
+    _servErr=(err&&err.code)||'error';
+    // Sin acceso a la colección: mostramos lo local + lo del documento viejo para no perder nada
+    if(_legacyServ){ var m={}; _legacyServ.forEach(function(s){m[s.id]=s;}); DB.servicios.forEach(function(s){m[s.id]=s;}); DB.servicios=Object.keys(m).map(function(k){return m[k];}); guardarLocal(); }
+    toast(_servErr==='permission-denied'
+      ? 'Falta permitir la colección "servicios" en las reglas de Firestore. Los datos siguen en esta computadora.'
+      : 'Servicios: sin conexión con la nube ('+_servErr+')');
+    if(_booted) render();
+  });
+}
+
+// Primera vez: pasa los servicios del documento viejo (+ los de esta computadora) a la colección nueva
+function _intentarMigrar(){
+  if(!_nubeLista || !_servLista) return;
+  if(_legacyServ && _migrado){
+    // La colección ya existe pero el documento viejo aún trae servicios: agregar los que falten y limpiar
+    var faltan=_legacyServ.filter(function(s){ return !DB.servicios.some(function(x){return x.id===s.id;}); });
+    if(faltan.length){ DB.servicios=DB.servicios.concat(faltan); }
+    sincronizarServicios().then(function(){ if(!_servErr) return _docRef.update({servicios: firebase.firestore.FieldValue.delete()}); }).catch(function(){});
+    _legacyServ=null;
+    return;
+  }
+  if(!_servVacio || _migrado) return;
+  var m={};
+  (_legacyServ||[]).forEach(function(s){ if(s&&s.id) m[s.id]=s; });
+  DB.servicios.forEach(function(s){ if(s&&s.id) m[s.id]=s; });   // lo local (más reciente) gana
+  DB.servicios=Object.keys(m).map(function(k){return m[k];});
+  guardarLocal();
+  _migrado=true; _servSync={};
+  if(!DB.servicios.length) return;
+  toast('Pasando '+DB.servicios.length+' servicios a la nube nueva…');
+  sincronizarServicios().then(function(){
+    if(_servErr) return;
+    toast('✓ '+DB.servicios.length+' servicios guardados en la nube');
+    _legacyServ=null;
+    return _docRef.update({servicios: firebase.firestore.FieldValue.delete()});
+  }).catch(function(e){ console.error(e); });
 }
 
 function borrarTodoNube(){
   if(!_docRef) return Promise.resolve();
-  var vacio = {clientes:[],custodios:[],servicios:[],fijos:[],recargas:[],incidencias:[],
+  var vacio = {clientes:[],custodios:[],fijos:[],recargas:[],incidencias:[],
     tarifas:JSON.parse(JSON.stringify(TARIFAS_DEFAULT)),
+    servicios: firebase.firestore.FieldValue.delete(),
     _updatedAt: firebase.firestore.FieldValue.serverTimestamp(), _updatedBy: DB.user||''};
-  return _docRef.set(vacio);
+  var borrarCol=function(col){ if(!col) return Promise.resolve();
+    return col.get().then(function(q){ var docs=q.docs, ps=[];
+      for(var i=0;i<docs.length;i+=400){ var b=_db.batch(); docs.slice(i,i+400).forEach(function(d){ b.delete(d.ref); }); ps.push(b.commit()); }
+      return Promise.all(ps); }); };
+  return _docRef.set(vacio,{merge:true}).then(function(){ return borrarCol(_servCol); }).then(function(){ return borrarCol(_casaCol); });
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function nowISO(){ return new Date().toISOString(); }
