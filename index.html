@@ -209,7 +209,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">OC</div>
-      <div><b>OpsControl</b><span>Gastos operativos · v18.4</span></div>
+      <div><b>OpsControl</b><span>Gastos operativos · v18.5</span></div>
     </div>
     <div class="nav-group">Operación</div>
     <div class="nav active" data-page="dashboard"><span class="ico">▦</span> Dashboard</div>
@@ -218,6 +218,7 @@
     <div class="nav" data-page="recargas"><span class="ico">☎</span> Recargas telefónicas <span class="badge hide" id="bdg-recargas">0</span></div>
     <div class="nav" data-page="incidencias"><span class="ico">⚑</span> Incidencias y ajustes <span class="badge hide" id="bdg-inci">0</span></div>
     <div class="nav" data-page="casa"><span class="ico">⌂</span> Casa Querétaro</div>
+    <div class="nav" data-page="nuevos"><span class="ico">★</span> Nuevos ingresos <span class="badge hide" id="bdg-nuevos">0</span></div>
     <div class="nav-group">Catálogos</div>
     <div class="nav" data-page="clientes"><span class="ico">▤</span> Clientes</div>
     <div class="nav" data-page="custodios"><span class="ico">☗</span> Custodios</div>
@@ -649,6 +650,7 @@ var PAGE_META = {
   reportes:['Reportes','Consulta, subtotales y exportación'],
   importar:['Importación masiva','Importar desde Excel'],
   casa:['Casa Querétaro','Viático Casa de Descanso · entradas y salidas'],
+  nuevos:['Nuevos ingresos','Fondo de viáticos para elementos nuevos'],
   reglas:['Reglas de cálculo','Tarifas y políticas de gastos operativos']
 };
 var current='dashboard';
@@ -670,7 +672,7 @@ function irAPeriodo(mk){
 function render(){
   var fns={dashboard:viewDashboard,servicios:viewServicios,fijos:viewFijos,recargas:viewRecargas,
     incidencias:viewIncidencias,clientes:viewClientes,custodios:viewCustodios,comprobante:viewComprobante,
-    reportes:viewReportes,importar:viewImportar,reglas:viewReglas,casa:viewCasa};
+    reportes:viewReportes,importar:viewImportar,reglas:viewReglas,casa:viewCasa,nuevos:viewNuevos};
   document.getElementById('content').innerHTML = (fns[current]||viewDashboard)();
   if(window['after_'+current]) window['after_'+current]();
   updateBadges();
@@ -679,6 +681,7 @@ function updateBadges(){
   var rp = DB.recargas.filter(function(r){ return inPeriod(r.fecha) && r.pendiente; }).length;
   var ip = DB.incidencias.filter(function(i){ return inPeriod(i.fecha) && i.pendiente; }).length;
   setBadge('bdg-recargas', rp); setBadge('bdg-inci', ip);
+  try{ setBadge('bdg-nuevos', fondoAlertas()); }catch(e){}
 }
 function setBadge(id,n){ var e=document.getElementById(id); if(!e)return; if(n>0){e.textContent=n;e.classList.remove('hide');}else{e.classList.add('hide');} }
 
@@ -715,9 +718,11 @@ function totalesPeriodo(){
   var inci=DB.incidencias.filter(function(i){return inPeriod(i.fecha);});
   var inciPend=inci.filter(function(i){return i.pendiente;}).length;
   var ajustes=inci.reduce(function(a,i){ return a + (i.signo==='resta'? -(+i.monto||0):(+i.monto||0)); },0);
-  return {serv:serv, nServ:nServ, operativo:operativo, casa:casa, fijos:fijos, recargas:recargas,
+  var fondoN=fondosPeriodo(), fondo=fondoN.reduce(function(a,f){return a+f.monto;},0);
+  fondoN.forEach(function(f){ if(f.estado!=='pagado') pendPago+=f.monto; });
+  return {serv:serv, nServ:nServ, operativo:operativo, casa:casa, fijos:fijos, recargas:recargas, fondo:fondo, fondoN:fondoN,
     recargasPend:recargasPend, inciPend:inciPend, ajustes:ajustes, pendPago:pendPago,
-    totalPagar: operativo+casa+fijos+recargas+ajustes};
+    totalPagar: operativo+casa+fijos+recargas+ajustes+fondo};
 }
 function viewDashboard(){
   var t=totalesPeriodo();
@@ -742,8 +747,17 @@ function viewDashboard(){
   +   kpi('Servicios registrados', t.nServ, periodLabel(),'')
   +   kpi('Gastos operativos', money(t.operativo),'Servicios del periodo','')
   +   kpi('Viático Casa de Descanso', money(t.casa),'Querétaro (separado)','')
-  +   kpi('Total a pagar (periodo)', money(t.totalPagar),'Operativo + casa + fijos + recargas ± ajustes','okk')
+  +   kpi('Total a pagar (periodo)', money(t.totalPagar),'Operativo + casa + fondo nuevos + fijos + recargas ± ajustes','okk')
   + '</div>'
+  + (function(){ var at=fondosAtrasados().length, pn=t.fondoN.filter(function(f){return f.estado==='pendiente';}).length, po=posiblesNuevos().length;
+      if(!t.fondoN.length && !at && !po) return '';
+      return '<div class="card" style="margin-top:14px;border:2px solid '+(at?'var(--danger)':'var(--warn)')+';cursor:pointer" onclick="nav(\'nuevos\')"><div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">'
+        +'<b>★ Fondo de nuevos ingresos</b>'
+        +'<span>'+t.fondoN.length+' elemento(s) esta semana · <b>'+money(t.fondo)+'</b></span>'
+        +(pn?'<span class="pill warn">'+pn+' pendiente(s)</span>':'')
+        +(at?'<span class="pill" style="background:var(--danger-bg);color:var(--danger)">'+at+' atrasado(s)</span>':'')
+        +(po?'<span class="pill warn">'+po+' posible(s) nuevo(s) por confirmar</span>':'')
+        +'<span class="muted small" style="margin-left:auto">Ver detalle →</span></div></div>'; })()
   + '<div class="kpis" style="margin-top:14px">'
   +   kpi('Servicios pendientes de pago', money(t.pendPago),'No marcados como pagados','warnk')
   +   kpi('Incidencias pendientes', t.inciPend,'Requieren atención', t.inciPend?'alert':'')
@@ -811,16 +825,18 @@ function viewCustodios(){
   var rows=DB.custodios.map(function(c){
     return '<tr><td><b>'+esc(c.numEmpleado||'—')+'</b></td><td>'+esc(c.nombre)+'</td>'
       +'<td>'+esc(c.base||'—')+'</td>'
+      +'<td class="small">'+(c.fechaIngreso?esc(c.fechaIngreso)+(fondoDe(c,semanaHoy())?' <span class="pill warn">Fondo</span>':''):'—')+'</td>'
       +'<td>'+(c.activo!==false?'<span class="pill ok">Activo</span>':'<span class="pill off">Inactivo</span>')+'</td>'
       +'<td class="right actions"><button class="btn btn-sm" onclick="editCustodio(\''+c.id+'\')">Editar</button>'
       +'<button class="btn btn-sm" onclick="toggleCustodio(\''+c.id+'\')">'+(c.activo!==false?'Inactivar':'Activar')+'</button></td></tr>';
-  }).join('') || '<tr><td colspan="5" class="empty">Sin custodios. Agrega el primero arriba.</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">Sin custodios. Agrega el primero arriba.</td></tr>';
   return ''
   + '<div class="card"><div class="card-h"><h2>Alta de custodio</h2></div>'
   +   '<div class="grid g4">'
   +     '<div><label class="fl">N° de empleado</label><input class="inp" id="cu-num" placeholder="Ej. 1046"></div>'
   +     '<div style="grid-column:span 2"><label class="fl">Nombre completo</label><input class="inp" id="cu-nom" placeholder="APELLIDOS NOMBRE" oninput="this.value=this.value.toUpperCase()"></div>'
   +     '<div><label class="fl">Base principal</label>'+selectHTML('cu-base',BASES,'')+'</div>'
+  +     '<div><label class="fl">Fecha de ingreso (si es nuevo)</label><input class="inp" type="date" id="cu-ing"></div>'
   +   '</div>'
   +   '<div style="margin-top:12px"><button class="btn btn-primary" onclick="addCustodio()">+ Agregar custodio</button></div>'
   + '</div>'
@@ -829,14 +845,16 @@ function viewCustodios(){
   +     '<span class="sub" style="margin-left:8px">'+DB.custodios.filter(function(c){return c.activo!==false;}).length+' activos</span></div>'
   +   '<input class="inp" id="cu-search" placeholder="🔍 Buscar por nombre, número o base…" autocomplete="off" oninput="filtrarCatalogo(\'cu\')" style="margin:6px 0 10px;max-width:360px">'
   +   '<div id="cu-dup"></div>'
-  +   '<div class="tbl-wrap"><table><thead><tr><th>N° emp.</th><th>Nombre</th><th>Base</th><th>Estatus</th><th class="right">Acciones</th></tr></thead><tbody id="cu-tbody">'+rows+'</tbody></table></div></div>';
+  +   '<div class="tbl-wrap"><table><thead><tr><th>N° emp.</th><th>Nombre</th><th>Base</th><th>Ingreso</th><th>Estatus</th><th class="right">Acciones</th></tr></thead><tbody id="cu-tbody">'+rows+'</tbody></table></div></div>';
 }
 function addCustodio(){
   var num=document.getElementById('cu-num').value.trim();
   var nom=document.getElementById('cu-nom').value.trim();
   var base=document.getElementById('cu-base').value;
+  var ing=(document.getElementById('cu-ing')||{}).value||'';
   if(!nom){ toast('Escribe el nombre del custodio'); return; }
-  DB.custodios.push(stamp({id:uid(),numEmpleado:num,nombre:nom,base:base,activo:true},true));
+  var nuevo={id:uid(),numEmpleado:num,nombre:nom,base:base,activo:true}; if(ing) nuevo.fechaIngreso=ing;
+  DB.custodios.push(stamp(nuevo,true));
   persist(); toast('Custodio agregado'); render();
 }
 function editCustodio(id){
@@ -844,6 +862,8 @@ function editCustodio(id){
   var nom=prompt('Nombre completo:',c.nombre); if(nom==null)return; c.nombre=nom.trim().toUpperCase();
   var num=prompt('N° de empleado:',c.numEmpleado||''); if(num!=null) c.numEmpleado=num.trim();
   var base=prompt('Base:',c.base||''); if(base!=null) c.base=base.trim();
+  var ing=prompt('Fecha de ingreso (dd/mm/aaaa) — déjalo vacío si no es nuevo:', c.fechaIngreso?c.fechaIngreso.split('-').reverse().join('/'):'');
+  if(ing!=null){ ing=ing.trim(); if(!ing) delete c.fechaIngreso; else { var fi=aFecha(ing); if(fi) c.fechaIngreso=fi; else toast('Fecha de ingreso no válida, no se cambió'); } }
   stamp(c,false); persist(); render();
 }
 function toggleCustodio(id){ var c=custodioById(id); if(c){c.activo=(c.activo===false);stamp(c,false);} persist(); render(); }
@@ -1706,7 +1726,9 @@ function comprobanteHTML(id){
   var subFijos=fijos.reduce(function(a,f){return a+(+f.importe||0);},0);
   var subRec=recargas.reduce(function(a,r){return a+(+r.monto||0);},0);
   var subInci=inci.reduce(function(a,i){return a+(i.signo==='resta'?-(+i.monto||0):(+i.monto||0));},0);
-  var totalFinal=subOper+subCasa+subFijos+subRec+subInci;
+  var fondoC=fondoDe(cust, periodVal()); if(fondoC && fondoC.estado==='no_aplica') fondoC=null;
+  var subFondo=fondoC?fondoC.monto:0;
+  var totalFinal=subOper+subCasa+subFijos+subRec+subInci+subFondo;
 
   var fijosRows=fijos.map(function(f){return '<tr><td>'+esc(f.servicio)+'</td><td>'+esc(clienteNombre(f.clienteId))+'</td><td class="right"><b>'+money(f.importe)+'</b></td></tr>';}).join('');
   var recRows=recargas.map(function(r){return '<tr><td>'+esc(r.fecha)+'</td><td>'+esc(r.motivo||'—')+'</td><td class="right"><b>'+money(r.monto)+'</b></td></tr>';}).join('');
@@ -1719,12 +1741,14 @@ function comprobanteHTML(id){
   + '</div></div>'
   + servBlock(operativos,'Gastos operativos de servicio')
   + servBlock(casa,'Viáticos Casa de Descanso (Querétaro)')
+  + (fondoC?'<div class="card"><div class="card-h"><h2>Fondo de viáticos · nuevo ingreso</h2><div class="grow"></div><span class="sub">Subtotal '+money(subFondo)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha de ingreso</th><th>Semana del fondo</th><th>Estado</th><th class="right">Importe</th></tr></thead><tbody><tr><td>'+esc(cust.fechaIngreso)+'</td><td>Semana '+fondoC.n+' de '+fondoC.de+'</td><td>'+(fondoC.estado==='pagado'?'Pagado':'Pendiente')+'</td><td class="right"><b>'+money(subFondo)+'</b></td></tr></tbody></table></div></div>':'')
   + (fijos.length?'<div class="card"><div class="card-h"><h2>Servicios fijos</h2><div class="grow"></div><span class="sub">Subtotal '+money(subFijos)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Servicio</th><th>Cliente</th><th class="right">Importe</th></tr></thead><tbody>'+fijosRows+'</tbody></table></div></div>':'')
   + (recargas.length?'<div class="card"><div class="card-h"><h2>Recargas telefónicas</h2><div class="grow"></div><span class="sub">Subtotal '+money(subRec)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Motivo</th><th class="right">Monto</th></tr></thead><tbody>'+recRows+'</tbody></table></div></div>':'')
   + (inci.length?'<div class="card"><div class="card-h"><h2>Incidencias y ajustes</h2><div class="grow"></div><span class="sub">Subtotal '+money(subInci)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th class="right">Monto</th></tr></thead><tbody>'+inciRows+'</tbody></table></div></div>':'')
   + '<div class="card"><div class="evi">'
   +   '<div class="row"><span class="k">Gastos operativos de servicio</span><span class="v">'+money(subOper)+'</span></div>'
   +   '<div class="row"><span class="k">Viáticos Casa de Descanso</span><span class="v">'+money(subCasa)+'</span></div>'
+  +   (subFondo?'<div class="row"><span class="k">Fondo de viáticos (nuevo ingreso)</span><span class="v">'+money(subFondo)+'</span></div>':'')
   +   '<div class="row"><span class="k">Servicios fijos</span><span class="v">'+money(subFijos)+'</span></div>'
   +   '<div class="row"><span class="k">Recargas telefónicas</span><span class="v">'+money(subRec)+'</span></div>'
   +   '<div class="row"><span class="k">Incidencias y ajustes</span><span class="v">'+money(subInci)+'</span></div>'
@@ -1776,6 +1800,9 @@ function genReporte(){
   var subRec=recargas.reduce(function(a,r){return a+(+r.monto||0);},0);
   var inci=DB.incidencias.filter(function(i){return inPeriod(i.fecha);});
   var subInci=inci.reduce(function(a,i){return a+(i.signo==='resta'?-(+i.monto||0):(+i.monto||0));},0);
+  var custF=(document.getElementById('rp-cust')||{}).value||'';
+  var fondoR=fondosPeriodo().filter(function(f){ return !custF || f.custodioId===custF; });
+  var subFondo=fondoR.reduce(function(a,f){return a+f.monto;},0);
 
   function block(arr,t){
     var rows=arr.map(function(s){var c=calcularServicio(s);var ti=tipoInfo(s.tipo);
@@ -1794,9 +1821,10 @@ function genReporte(){
     + '<div class="card"><div class="evi">'
     +   '<div class="row"><span class="k">Gastos operativos de servicio</span><span class="v">'+money(subOper)+'</span></div>'
     +   '<div class="row"><span class="k">Viáticos Casa de Descanso</span><span class="v">'+money(subCasa)+'</span></div>'
+    +   '<div class="row"><span class="k">Fondo de viáticos nuevos ingresos ('+fondoR.length+')</span><span class="v">'+money(subFondo)+'</span></div>'
     +   '<div class="row"><span class="k">Recargas telefónicas</span><span class="v">'+money(subRec)+'</span></div>'
     +   '<div class="row"><span class="k">Incidencias y ajustes</span><span class="v">'+money(subInci)+'</span></div>'
-    +   '<div class="total"><span>Total general</span><span>'+money(subOper+subCasa+subRec+subInci)+'</span></div>'
+    +   '<div class="total"><span>Total general</span><span>'+money(subOper+subCasa+subRec+subInci+subFondo)+'</span></div>'
     + '</div></div>';
 }
 function exportExcel(){
@@ -1840,6 +1868,14 @@ function exportExcel(){
       Cliente:clienteNombre(f.clienteId), Custodio:custodioNombre(f.custodioId),
       Importe:+f.importe||0, ImporteServicio:+f.importe||0, 'Motivo/Obs':f.servicio||''
     }));
+  });
+
+  // 2b) Fondo de viáticos de nuevos ingresos
+  var custF2=(document.getElementById('rp-cust')||{}).value||'';
+  fondosPeriodo().filter(function(f){ return !custF2 || f.custodioId===custF2; }).forEach(function(f){
+    var c=custodioById(f.custodioId)||{};
+    data.push(fila({ Registro:'FONDO NUEVO', Fecha:c.fechaIngreso||'', Tipo:'Fondo de viáticos', Concepto:'Semana '+f.n+' de '+f.de,
+      Custodio:custodioNombre(f.custodioId), Importe:f.monto, ImporteServicio:f.monto, 'Motivo/Obs':(f.estado==='pagado'?'Pagado':'Pendiente') }));
   });
 
   // 3) Recargas telefónicas (una por custodio)
@@ -2294,6 +2330,169 @@ function casaExportar(){
   XLSX.writeFile(wb,'Casa_Queretaro_'+(periodVal()||'todo')+'.xlsx');
 }
 
+/* ====================================================================
+   NUEVOS INGRESOS · FONDO DE VIÁTICOS
+   Regla: cada elemento nuevo recibe $monto por semana durante sus
+   primeras N semanas (por defecto $1,000 × 2 semanas = $2,000).
+   - La semana 1 es la semana ISO de su fecha de ingreso.
+   - Estado por semana guardado en custodio.fondo['YYYY-Www'] = 'pagado' | 'no_aplica'
+     (sin valor = pendiente). Se suma al total a pagar salvo "no aplica".
+   ==================================================================== */
+function fondoCfg(){ var f=(DB.tarifas&&DB.tarifas.fondoNuevo)||{}; return { monto:(f.monto!=null&&f.monto!=='')?+f.monto:1000, semanas:(f.semanas!=null&&f.semanas!=='')?Math.max(1,+f.semanas):2 }; }
+function lunesSemana(wk){ var m=String(wk||'').match(/(\d{4})-W(\d{2})/); if(!m) return null; var y=+m[1], w=+m[2];
+  var j4=new Date(Date.UTC(y,0,4)), d=j4.getUTCDay()||7; var mon=new Date(j4); mon.setUTCDate(j4.getUTCDate()-d+1+(w-1)*7); return mon; }
+function semanaMas(wk,n){ var l=lunesSemana(wk); if(!l) return ''; l.setUTCDate(l.getUTCDate()+7*n); return isoWeekKey(l.toISOString().slice(0,10)); }
+function semanasEntre(a,b){ var la=lunesSemana(a), lb=lunesSemana(b); if(!la||!lb) return null; return Math.round((lb-la)/604800000); }
+function rangoSemana(wk){ var l=lunesSemana(wk); if(!l) return wk; var d=new Date(l); d.setUTCDate(d.getUTCDate()+6);
+  function f(x){ return pad2(x.getUTCDate())+'/'+pad2(x.getUTCMonth()+1); } return f(l)+' al '+f(d); }
+function semanaHoy(){ var t=new Date(); return isoWeekKey(t.getFullYear()+'-'+pad2(t.getMonth()+1)+'-'+pad2(t.getDate())); }
+
+// Fondo que le toca a un custodio en una semana (o null)
+function fondoDe(c, wk){
+  if(!c || !c.fechaIngreso || !wk) return null;
+  var cfg=fondoCfg(), ini=isoWeekKey(c.fechaIngreso), k=semanasEntre(ini,wk);
+  if(k==null || k<0 || k>=cfg.semanas) return null;
+  var est=(c.fondo||{})[wk]||'pendiente';
+  return { custodioId:c.id, semana:wk, n:k+1, de:cfg.semanas, monto:cfg.monto, estado:est };
+}
+// Fondos que se suman en el periodo seleccionado (excluye "no aplica")
+function fondosPeriodo(){
+  var wk=periodVal(); if(!wk || wk.indexOf('W')<0) return [];
+  return DB.custodios.map(function(c){ return fondoDe(c,wk); }).filter(function(f){ return f && f.estado!=='no_aplica'; });
+}
+// Todas las semanas de fondo de un custodio
+function fondoSemanas(c){
+  if(!c||!c.fechaIngreso) return [];
+  var ini=isoWeekKey(c.fechaIngreso), out=[];
+  for(var i=0;i<fondoCfg().semanas;i++){ var wk=semanaMas(ini,i); out.push(fondoDe(c,wk)); }
+  return out;
+}
+// Pendientes de semanas que ya pasaron (lo que "se pasó")
+function fondosAtrasados(){
+  var hoy=semanaHoy(), out=[];
+  DB.custodios.forEach(function(c){ fondoSemanas(c).forEach(function(f){ if(f && f.estado==='pendiente' && f.semana<hoy) out.push(f); }); });
+  return out.sort(function(a,b){ return a.semana.localeCompare(b.semana); });
+}
+// Primera actividad registrada de cada elemento (servicios, casa, fijos)
+function primeraActividad(){
+  var m={};
+  function ver(id,f){ if(!id||!f) return; if(!m[id]||f<m[id]) m[id]=f; }
+  DB.servicios.forEach(function(s){ (s.custodios||[]).forEach(function(id){ ver(id, s.fechaInicio||s.fecha); }); });
+  (DB.casa||[]).forEach(function(r){ (r.custodios||[]).forEach(function(id){ ver(id, r.fechaEntrada); }); });
+  (DB.fijos||[]).forEach(function(f){ ver(f.custodioId, f.fecha); });
+  return m;
+}
+// Elementos sin fecha de ingreso cuya primera actividad es reciente -> posibles nuevos
+function posiblesNuevos(){
+  var pa=primeraActividad(), fechas=Object.keys(pa).map(function(k){return pa[k];}).sort();
+  if(!fechas.length) return [];
+  var inicioDatos=isoWeekKey(fechas[0]), hoy=semanaHoy();
+  return DB.custodios.filter(function(c){
+    if(c.fechaIngreso || c.noNuevo || !pa[c.id]) return false;
+    var wk=isoWeekKey(pa[c.id]);
+    var desdeInicio=semanasEntre(inicioDatos,wk), haceCuanto=semanasEntre(wk,hoy);
+    return desdeInicio!=null && desdeInicio>=2 && haceCuanto!=null && haceCuanto<=8;
+  }).map(function(c){ return {c:c, fecha:pa[c.id]}; }).sort(function(a,b){ return b.fecha.localeCompare(a.fecha); });
+}
+function fondoAlertas(){ return fondosAtrasados().length + fondosPeriodo().filter(function(f){return f.estado==='pendiente';}).length + posiblesNuevos().length; }
+
+function fondoMarcar(cid, wk, estado){
+  var c=custodioById(cid); if(!c) return;
+  if(!c.fondo) c.fondo={};
+  if(!estado || estado==='pendiente') delete c.fondo[wk]; else c.fondo[wk]=estado;
+  stamp(c,false); persist(); render();
+}
+function fondoIngreso(cid, fecha){
+  var c=custodioById(cid); if(!c) return;
+  if(!fecha){ toast('Indica la fecha de ingreso'); return; }
+  c.fechaIngreso=fecha; delete c.noNuevo; stamp(c,false); persist(); toast('Ingreso registrado: '+c.nombre); render();
+}
+function fondoNoNuevo(cid){ var c=custodioById(cid); if(!c) return; c.noNuevo=true; stamp(c,false); persist(); render(); }
+function fondoQuitarIngreso(cid){ var c=custodioById(cid); if(!c) return; if(!confirm('¿Quitar la fecha de ingreso de '+c.nombre+'? Ya no se le calculará fondo.')) return; delete c.fechaIngreso; stamp(c,false); persist(); render(); }
+function fondoRegistrarManual(){
+  var id=document.getElementById('fn-cust').value, f=document.getElementById('fn-fecha').value;
+  if(!id){ toast('Selecciona el elemento'); return; }
+  fondoIngreso(id,f);
+}
+function irASemana(wk){ var p=document.getElementById('period'); p.type='week'; p.value=wk; render(); }
+
+function _pillFondo(est){
+  return est==='pagado'?'<span class="pill ok">✓ Pagado</span>':est==='no_aplica'?'<span class="pill off">No aplica</span>':'<span class="pill warn">Pendiente</span>';
+}
+function _btnsFondo(f){
+  var a='\''+f.custodioId+'\',\''+f.semana+'\'';
+  return (f.estado!=='pagado'?'<button class="btn btn-sm btn-primary" onclick="fondoMarcar('+a+',\'pagado\')">Marcar pagado</button> ':'<button class="btn btn-sm" onclick="fondoMarcar('+a+',\'pendiente\')">Deshacer</button> ')
+    + (f.estado!=='no_aplica'?'<button class="btn btn-sm" onclick="fondoMarcar('+a+',\'no_aplica\')">No aplica</button>':'');
+}
+
+function viewNuevos(){
+  var cfg=fondoCfg(), wk=periodVal(), hoy=semanaHoy();
+  var atras=fondosAtrasados();
+  var esta = (wk&&wk.indexOf('W')>=0) ? DB.custodios.map(function(c){return fondoDe(c,wk);}).filter(Boolean) : [];
+  var posibles=posiblesNuevos();
+  var totalSemana=esta.filter(function(f){return f.estado!=='no_aplica';}).reduce(function(a,f){return a+f.monto;},0);
+  var pendSemana=esta.filter(function(f){return f.estado==='pendiente';}).length;
+
+  var html='';
+  html+='<div class="card"><div class="card-h"><h2>Fondo de viáticos para nuevos ingresos</h2><div class="grow"></div><button class="btn btn-sm" onclick="nav(\'reglas\')">Cambiar monto / semanas</button></div>'
+    +'<div class="small muted">Regla actual: <b>'+money(cfg.monto)+' por semana</b> durante las primeras <b>'+cfg.semanas+' semana'+(cfg.semanas>1?'s':'')+'</b> desde su ingreso = <b>'+money(cfg.monto*cfg.semanas)+'</b> por elemento. Se suma solo en su comprobante y en el total a pagar de esa semana.</div></div>';
+
+  html+='<div class="kpis">'
+    +kpi('Fondos esta semana', esta.filter(function(f){return f.estado!=='no_aplica';}).length, periodLabel(),'')
+    +kpi('Importe de la semana', money(totalSemana),'Se suma al total a pagar','okk')
+    +kpi('Pendientes esta semana', pendSemana,'Sin marcar como pagados', pendSemana?'warnk':'')
+    +kpi('Atrasados', atras.length,'Semanas pasadas sin pagar', atras.length?'alert':'')
+    +'</div>';
+
+  if(atras.length){
+    html+='<div class="card" style="border:2px solid var(--danger)"><div class="card-h"><h2 style="color:var(--danger)">⚠ Fondos que se pasaron</h2><div class="grow"></div><span class="sub">'+money(atras.reduce(function(a,f){return a+f.monto;},0))+'</span></div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th>Semana</th><th>Fondo</th><th class="right">Monto</th><th class="right">Acciones</th></tr></thead><tbody>'
+      +atras.map(function(f){ return '<tr><td><b>'+esc(_custEtiqueta(f.custodioId))+'</b></td><td><a href="#" onclick="irASemana(\''+f.semana+'\');return false">'+esc(f.semana)+'</a> <span class="muted small">'+rangoSemana(f.semana)+'</span></td><td>Semana '+f.n+' de '+f.de+'</td><td class="right"><b>'+money(f.monto)+'</b></td><td class="right" style="white-space:nowrap">'+_btnsFondo(f)+'</td></tr>'; }).join('')
+      +'</tbody></table></div><div class="small muted" style="margin-top:8px">Si ya se pagó, márcalo como pagado. Si lo vas a pagar en otra semana, regístralo en Incidencias y ajustes y marca este como "No aplica".</div></div>';
+  }
+
+  html+='<div class="card"><div class="card-h"><h2>Les toca fondo esta semana</h2><div class="grow"></div><span class="sub">'+periodLabel()+'</span></div>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th>Fecha de ingreso</th><th>Fondo</th><th class="right">Monto</th><th>Estado</th><th class="right">Acciones</th></tr></thead><tbody>'
+    +(esta.map(function(f){ var c=custodioById(f.custodioId);
+        return '<tr><td><b>'+esc(_custEtiqueta(f.custodioId))+'</b></td><td>'+esc(c.fechaIngreso)+'</td><td><span class="pill '+(f.n===1?'ok':'warn')+'">Semana '+f.n+' de '+f.de+'</span></td><td class="right"><b>'+money(f.monto)+'</b></td><td>'+_pillFondo(f.estado)+'</td><td class="right" style="white-space:nowrap">'+_btnsFondo(f)+'</td></tr>'; }).join('')
+      || '<tr><td colspan="6" class="empty">Nadie está en sus semanas de fondo en este periodo.</td></tr>')
+    +'</tbody></table></div></div>';
+
+  if(posibles.length){
+    html+='<div class="card" style="border:2px solid var(--warn)"><div class="card-h"><h2>🆕 Posibles elementos nuevos</h2><div class="grow"></div><span class="sub">'+posibles.length+' por confirmar</span></div>'
+      +'<div class="small muted" style="margin-bottom:8px">Aparecieron por primera vez en servicios o en Casa Querétaro hace poco y no tienen fecha de ingreso. Confirma la fecha para que se les calcule el fondo, o indica que no son nuevos.</div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th>Primera actividad</th><th>Fecha de ingreso</th><th class="right">Acciones</th></tr></thead><tbody>'
+      +posibles.map(function(p){ return '<tr><td><b>'+esc(_custEtiqueta(p.c.id))+'</b></td><td>'+esc(p.fecha)+' <span class="muted small">('+isoWeekKey(p.fecha)+')</span></td>'
+        +'<td><input class="inp" type="date" id="fi-'+p.c.id+'" value="'+esc(p.fecha)+'" style="max-width:170px"></td>'
+        +'<td class="right" style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="fondoIngreso(\''+p.c.id+'\',document.getElementById(\'fi-'+p.c.id+'\').value)">Confirmar ingreso</button> <button class="btn btn-sm" onclick="fondoNoNuevo(\''+p.c.id+'\')">No es nuevo</button></td></tr>'; }).join('')
+      +'</tbody></table></div></div>';
+  }
+
+  var custOpt=DB.custodios.filter(function(c){return c.activo!==false;}).sort(function(a,b){return String(a.numEmpleado||'').localeCompare(String(b.numEmpleado||''),'es',{numeric:true});})
+    .map(function(c){return {v:c.id,l:(c.numEmpleado?c.numEmpleado+' ':'')+c.nombre+(c.fechaIngreso?' · ingreso '+c.fechaIngreso:'')};});
+  html+='<div class="card"><div class="card-h"><h2>Registrar ingreso</h2></div>'
+    +'<div class="grid g3"><div><label class="fl">Elemento</label>'+selectHTML('fn-cust',custOpt,'')+'</div>'
+    +'<div><label class="fl">Fecha de ingreso</label><input class="inp" type="date" id="fn-fecha" value="'+new Date().toISOString().slice(0,10)+'"></div>'
+    +'<div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="fondoRegistrarManual()">Guardar ingreso</button></div></div>'
+    +'<div class="small muted" style="margin-top:8px">Si el elemento aún no existe, primero dalo de alta en Custodios (ahí también puedes poner su fecha de ingreso).</div></div>';
+
+  // Historial: ingresos de las últimas 12 semanas
+  var recientes=DB.custodios.filter(function(c){ if(!c.fechaIngreso) return false; var d=semanasEntre(isoWeekKey(c.fechaIngreso),hoy); return d!=null && d<=12 && d>=-4; })
+    .sort(function(a,b){ return String(b.fechaIngreso).localeCompare(String(a.fechaIngreso)); });
+  var cols=''; for(var i=1;i<=cfg.semanas;i++) cols+='<th>Semana '+i+'</th>';
+  html+='<div class="card"><div class="card-h"><h2>Nuevos ingresos recientes</h2><div class="grow"></div><span class="sub">Últimas 12 semanas</span></div>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th>Ingreso</th>'+cols+'<th class="right">Pagado</th><th class="right"></th></tr></thead><tbody>'
+    +(recientes.map(function(c){ var fs=fondoSemanas(c), pag=0;
+        var celdas=fs.map(function(f){ if(f.estado==='pagado') pag+=f.monto;
+          return '<td class="small"><a href="#" onclick="irASemana(\''+f.semana+'\');return false">'+esc(f.semana)+'</a><br>'+_pillFondo(f.estado)+(f.estado==='pendiente'&&f.semana<hoy?' <span class="pill" style="background:var(--danger-bg);color:var(--danger)">Atrasado</span>':'')+'</td>'; }).join('');
+        return '<tr><td><b>'+esc(_custEtiqueta(c.id))+'</b></td><td>'+esc(c.fechaIngreso)+'</td>'+celdas+'<td class="right"><b>'+money(pag)+'</b> <span class="muted small">/ '+money(cfg.monto*cfg.semanas)+'</span></td>'
+          +'<td class="right"><button class="btn btn-sm btn-danger" title="Quitar fecha de ingreso" onclick="fondoQuitarIngreso(\''+c.id+'\')">✕</button></td></tr>'; }).join('')
+      || '<tr><td colspan="'+(4+cfg.semanas)+'" class="empty">Sin ingresos registrados en las últimas semanas.</td></tr>')
+    +'</tbody></table></div></div>';
+  return html;
+}
+function after_nuevos(){}
+
 var _importRows=[], _parsed=null;
 function previsualizar(){
   var f=document.getElementById('im-file'); if(!f||!f.files[0]){ document.getElementById('im-prev').innerHTML=''; return; }
@@ -2647,6 +2846,11 @@ function viewReglas(){
   +   '<div class="sep">Zona Nacional</div><div class="grid g4">'+f('nacional','t1','Primer turno (0–12 h)')+f('nacional','ad','Adicional 13–18 h')+f('nacional','t2','Segundo turno (19–24 h)')+f('nacional','bloque','Bloque 25 h+ (c/6 h)')+'</div>'
   +   '<div class="sep">Zona Fronteriza</div><div class="grid g4">'+f('fronteriza','t1','Primer turno (0–12 h)')+f('fronteriza','ad','Adicional 13–18 h')+f('fronteriza','t2','Segundo turno (19–24 h)')+f('fronteriza','bloque','Bloque 25 h+ (c/6 h)')+'</div>'
   + '</div>'
+  + '<div class="card"><div class="card-h"><h2>Fondo de viáticos · nuevos ingresos</h2><div class="grow"></div><button class="btn btn-primary" onclick="saveTarifas()">Guardar</button></div>'
+  +   '<div class="grid g3"><div><label class="fl">Monto por semana</label><input class="inp" type="number" id="tf-fondo-monto" value="'+fondoCfg().monto+'"></div>'
+  +   '<div><label class="fl">Número de semanas</label><input class="inp" type="number" min="1" id="tf-fondo-semanas" value="'+fondoCfg().semanas+'"></div>'
+  +   '<div style="display:flex;align-items:flex-end" class="small muted">Total por elemento nuevo: '+money(fondoCfg().monto*fondoCfg().semanas)+'</div></div>'
+  + '</div>'
   + '<div class="card"><div class="card-h"><h2>Políticas aplicadas</h2></div>'
   +   '<ul class="rule-list">'
   +   '<li>El cálculo usa el <b>tiempo total de comisión</b>: desde la salida de la base hasta la liberación (o regreso a base).</li>'
@@ -2659,6 +2863,8 @@ function viewReglas(){
 }
 function saveTarifas(){
   ['nacional','fronteriza'].forEach(function(z){ ['t1','ad','t2','bloque'].forEach(function(c){ var el=document.getElementById('tf-'+z+'-'+c); if(el) DB.tarifas[z][c]=+el.value||0; }); });
+  var fm=document.getElementById('tf-fondo-monto'), fsm=document.getElementById('tf-fondo-semanas');
+  if(fm&&fsm) DB.tarifas.fondoNuevo={monto:+fm.value||0, semanas:Math.max(1,+fsm.value||1)};
   persist(); toast('Tarifas guardadas'); render();
 }
 
