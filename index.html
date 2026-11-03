@@ -203,6 +203,19 @@
     .cp-doc{page-break-after:always}
     .cp-doc:last-child{page-break-after:auto}
   }
+  /* Lista con buscador (se aplica sola a los select con muchas opciones) */
+  .ss-wrap{position:relative}
+  .ss-wrap > select.ss-src{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;left:0;top:0}
+  .ss-inp{width:100%;cursor:text;padding-right:30px !important;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+  .ss-inp:disabled{background-color:var(--soft2);cursor:not-allowed}
+  .ss-list{position:absolute;z-index:60;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line2);border-radius:var(--r-sm);box-shadow:var(--shadow);max-height:280px;overflow:auto;display:none}
+  .ss-list.show{display:block}
+  .ss-opt{padding:8px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--soft2)}
+  .ss-opt:last-child{border-bottom:none}
+  .ss-opt.act{background:var(--accent-soft);color:var(--accent)}
+  .ss-opt.sel{font-weight:700}
+  .ss-opt mark{background:#fef08a;color:inherit;padding:0 1px;border-radius:2px}
+  .ss-empty{padding:10px 12px;font-size:13px;color:var(--muted);font-style:italic}
 </style>
 </head>
 <body>
@@ -3132,6 +3145,88 @@ function iniciar(){
   });
 }
 iniciar();
+
+/* ====================================================================
+   LISTAS CON BUSCADOR: escribe para buscar en cualquier <select> con
+   varias opciones (custodios, clientes, estados…). El <select> original
+   se conserva oculto y sigue siendo el que guarda el valor.
+   ==================================================================== */
+var SS_MIN_OPC = 7;   // a partir de cuántas opciones se activa el buscador
+function ssNorm(t){ return (t||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function ssSync(sel){
+  var w=sel._ss; if(!w) return;
+  var o=sel.options[sel.selectedIndex];
+  w.inp.value = (o && o.value!=='') ? o.text : '';
+  w.inp.placeholder = (sel.options[0] && sel.options[0].value==='') ? sel.options[0].text.replace(/…$/,'')+' (escribe para buscar)…' : 'Escribe para buscar…';
+  w.inp.disabled = sel.disabled;
+}
+function ssEnhance(sel){
+  if(sel._ss || sel.multiple || sel.hasAttribute('data-nosearch')) return;
+  if(sel.options.length < SS_MIN_OPC) return;
+  var wrap=document.createElement('div'); wrap.className='ss-wrap';
+  sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel);
+  sel.classList.add('ss-src'); sel.tabIndex=-1;
+  var inp=document.createElement('input'); inp.type='text'; inp.className='inp ss-inp'; inp.autocomplete='off';
+  if(sel.style.cssText) inp.style.cssText=sel.style.cssText;
+  var list=document.createElement('div'); list.className='ss-list';
+  wrap.appendChild(inp); wrap.appendChild(list);
+  var st={inp:inp,list:list,act:-1,items:[]}; sel._ss=st;
+  function pintar(q){
+    var nq=ssNorm(q).trim(), palabras=nq.split(/\s+/).filter(Boolean);
+    st.items=[]; var html='';
+    Array.prototype.forEach.call(sel.options,function(o,i){
+      if(o.value==='' || o.disabled) return;
+      var nt=ssNorm(o.text);
+      if(palabras.length && !palabras.every(function(p){return nt.indexOf(p)>=0;})) return;
+      var txt=esc(o.text);
+      if(palabras.length){ var p0=palabras[0], k=nt.indexOf(p0); if(k>=0){ var raw=o.text; txt=esc(raw.slice(0,k))+'<mark>'+esc(raw.slice(k,k+p0.length))+'</mark>'+esc(raw.slice(k+p0.length)); } }
+      st.items.push(i);
+      html+='<div class="ss-opt'+(i===sel.selectedIndex?' sel':'')+'" data-i="'+i+'">'+txt+'</div>';
+    });
+    list.innerHTML = html || '<div class="ss-empty">Sin coincidencias</div>';
+    st.act = st.items.length ? 0 : -1; marcar();
+  }
+  function marcar(){
+    var els=list.querySelectorAll('.ss-opt');
+    els.forEach(function(e,j){ e.classList.toggle('act', j===st.act); });
+    if(st.act>=0 && els[st.act]) els[st.act].scrollIntoView({block:'nearest'});
+  }
+  function abrir(){ if(sel.disabled) return; pintar(''); list.classList.add('show'); inp.select(); }
+  function cerrar(){ list.classList.remove('show'); ssSync(sel); }
+  function elegir(i){
+    if(sel.selectedIndex!==i){ sel.selectedIndex=i; sel.dispatchEvent(new Event('change',{bubbles:true})); sel.dispatchEvent(new Event('input',{bubbles:true})); }
+    cerrar();
+  }
+  inp.addEventListener('focus',abrir);
+  inp.addEventListener('click',function(){ if(!list.classList.contains('show')) abrir(); });
+  inp.addEventListener('input',function(){ list.classList.add('show'); pintar(inp.value); });
+  inp.addEventListener('keydown',function(e){
+    if(e.key==='ArrowDown'){ e.preventDefault(); if(!list.classList.contains('show')) abrir(); else if(st.act<st.items.length-1){st.act++;marcar();} }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); if(st.act>0){st.act--;marcar();} }
+    else if(e.key==='Enter'){ if(list.classList.contains('show') && st.act>=0){ e.preventDefault(); elegir(st.items[st.act]); } }
+    else if(e.key==='Escape'){ cerrar(); inp.blur(); }
+    else if(e.key==='Tab'){ if(list.classList.contains('show') && inp.value && st.items.length===1) elegir(st.items[0]); else cerrar(); }
+  });
+  inp.addEventListener('blur',function(){ setTimeout(function(){ if(document.activeElement!==inp) cerrar(); },150); });
+  list.addEventListener('mousedown',function(e){ e.preventDefault(); var d=e.target.closest('.ss-opt'); if(d) elegir(+d.getAttribute('data-i')); });
+  sel.addEventListener('change',function(){ ssSync(sel); });
+  ssSync(sel);
+}
+// Cuando el código cambia el valor o lo deshabilita (p. ej. al cargar un servicio para editar), refrescar el texto visible
+(function(){
+  var P=HTMLSelectElement.prototype;
+  ['value','selectedIndex','disabled'].forEach(function(prop){
+    var d=Object.getOwnPropertyDescriptor(P,prop); if(!d||!d.set) return;
+    Object.defineProperty(P,prop,{configurable:true,enumerable:d.enumerable,get:d.get,set:function(v){ d.set.call(this,v); if(this._ss) ssSync(this); }});
+  });
+})();
+function ssEnhanceAll(root){ (root||document).querySelectorAll('select.inp').forEach(ssEnhance); }
+(function(){
+  var pend=false;
+  new MutationObserver(function(){ if(pend) return; pend=true; requestAnimationFrame(function(){ pend=false; ssEnhanceAll(); }); })
+    .observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',function(){ ssEnhanceAll(); });
+})();
 </script>
 </body>
 </html>
