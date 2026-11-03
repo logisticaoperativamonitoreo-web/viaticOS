@@ -123,6 +123,26 @@
   .pill{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:999px}
   .pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)}
   .pill.off{background:var(--soft2);color:var(--muted)}
+  .pill.bad{background:var(--danger-bg);color:var(--danger)} .pill.info{background:var(--accent-soft);color:var(--accent)}
+  .rev{display:flex;flex-wrap:wrap;gap:4px}
+  .rev .pill{font-size:10.5px;padding:1px 7px;white-space:nowrap}
+  .svc-tog{border:1px solid var(--line);background:#fff;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:11px;color:var(--muted);transition:transform .15s}
+  .svc-tog.open{transform:rotate(90deg);color:var(--accent);border-color:var(--accent)}
+  tr.svc-row.open > td{background:var(--accent-soft)}
+  tr.svc-det > td{background:var(--soft);padding:0 !important;border-bottom:2px solid var(--accent)}
+  .det-wrap{padding:14px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .det-box{background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px}
+  .det-box h4{margin:0 0 6px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em}
+  .det-box .r{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:2px 0}
+  .det-box .r .k{color:var(--muted)} .det-box .r .v{font-weight:600;text-align:right}
+  .det-box.b-ruta{border-top:3px solid var(--accent)} .det-box.b-hrs{border-top:3px solid #7c3aed}
+  .det-box.b-imp{border-top:3px solid var(--ok)} .det-box.b-aud{border-top:3px solid var(--warn)}
+  .fchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+  .fchip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink)}
+  .fchip:hover{border-color:var(--line2)} .fchip .n{color:var(--muted);font-weight:700;margin-left:4px}
+  .fchip.on{background:var(--ink);color:#fff;border-color:var(--ink)} .fchip.on .n{color:#cbd5e1}
+  .fchip.g-ok.on{background:var(--ok);border-color:var(--ok)} .fchip.g-bad.on{background:var(--danger);border-color:var(--danger)}
+  .fchip.g-warn.on{background:var(--warn);border-color:var(--warn)} .fchip.g-info.on{background:var(--accent);border-color:var(--accent)}
 
   /* Calc evidence box */
   .evi{background:var(--soft);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
@@ -1038,7 +1058,7 @@ function viewServicios(){
   var enPeriodo=DB.servicios.filter(function(s){return inPeriod(s.fecha);});
   var totalServ=DB.servicios.length;
   var listRows=enPeriodo.slice().reverse().map(servicioRow).join('')
-    || '<tr><td colspan="8" class="empty">Sin servicios en el periodo seleccionado</td></tr>';
+    || '<tr><td colspan="10" class="empty">Sin servicios en el periodo seleccionado</td></tr>';
   var otrosMeses={};
   DB.servicios.forEach(function(s){ if(!inPeriod(s.fecha)){ var mk=isoWeekKey(s.fecha)||'sin fecha'; otrosMeses[mk]=(otrosMeses[mk]||0)+1; } });
   var avisoOtros='';
@@ -1114,6 +1134,9 @@ function viewServicios(){
   +   '<span class="legend">'+TIPOS.map(function(tp){return '<span><span class="dot" style="background:'+tp.color+'"></span>'+esc(tp.key)+'</span>';}).join('')+'</span></div>'
   +   avisoOtros
   +   '<input class="inp" id="svc-search" placeholder="🔍 Buscar por consecutivo, cliente, ruta…" oninput="filtrarTablaServicios()" style="margin:12px 0 8px;max-width:420px">'
+  +   '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px"><span class="small muted" style="font-weight:700">Filtro rápido (puedes combinar varios):</span>'
+  +     '<button class="btn btn-sm" type="button" onclick="expandirTodosServicios()" id="svc-expall">▸ Ver detalles de todos</button></div>'
+  +   '<div class="fchips" id="svc-fchips">'+chipsFiltroServicios(enPeriodo)+'</div>'
   +   '<div id="svc-bulkbar" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 10px;padding:10px 14px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r)">'
   +     '<b id="svc-selcount">0 seleccionados</b><div class="grow"></div>'
   +     '<button class="btn btn-sm btn-accent" onclick="abrirEdicionMultiple()">Editar seleccionados</button>'
@@ -1121,20 +1144,132 @@ function viewServicios(){
   +     '<button class="btn btn-sm" onclick="limpiarSelServicios()">Quitar selección</button>'
   +   '</div>'
   +   '<div id="svc-bulkedit"></div>'
-  +   '<div class="tbl-wrap" style="margin-top:4px"><table id="svc-table"><thead><tr><th style="width:34px;text-align:center"><input type="checkbox" id="svc-checkall" onchange="toggleAllServicios(this.checked)" title="Seleccionar todos"></th><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Horas</th><th>Zona</th><th class="right">Importe</th><th class="right">Acciones</th></tr></thead><tbody id="svc-tbody">'+listRows+'</tbody></table></div></div>';
+  +   '<div class="tbl-wrap" style="margin-top:4px"><table id="svc-table"><thead><tr><th style="width:30px"></th><th style="width:34px;text-align:center"><input type="checkbox" id="svc-checkall" onchange="toggleAllServicios(this.checked)" title="Seleccionar todos"></th><th>Consec.</th><th>Cliente</th><th>Ruta</th><th>Horas</th><th>Zona</th><th>Revisión</th><th class="right">Importe</th><th class="right">Acciones</th></tr></thead><tbody id="svc-tbody">'+listRows+'</tbody></table></div></div>';
+}
+/* ---- Estado de revisión de un servicio (para etiquetas y filtros) ---- */
+function estadoServicio(s){
+  var c=calcularServicio(s);
+  var editado=!!(s.updatedAt && s.createdAt && s.updatedAt!==s.createdAt);
+  var precio = (s.importeManual!=null && +s.importeManual>0) ? 'manual' : (c.importeTotal>0 ? 'auto' : 'sin');
+  return {
+    c:c,
+    base: s.base ? 'si':'no',
+    precio: precio,
+    editado: editado ? 'si':'no',
+    horas: c.horasTotal!=null ? 'si':'no',
+    cust: (s.custodios||[]).length ? 'si':'no',
+    pago: s.estatusPago==='pagado' ? 'pagado':'pendiente',
+    importado: s.importado ? 'si':'no'
+  };
+}
+var SVC_FILTROS=[
+  {k:'todos',l:'Todos',g:''},
+  {k:'base:no',l:'Sin base',g:'bad'},{k:'base:si',l:'Con base',g:'ok'},
+  {k:'precio:sin',l:'Sin precio',g:'bad'},{k:'precio:manual',l:'Precio manual',g:'info'},{k:'precio:auto',l:'Precio automático',g:'ok'},
+  {k:'editado:no',l:'Sin editar',g:'warn'},{k:'editado:si',l:'Editados',g:'ok'},
+  {k:'horas:no',l:'Sin horas',g:'bad'},{k:'cust:no',l:'Sin custodios',g:'bad'},
+  {k:'pago:pendiente',l:'Pago pendiente',g:'warn'},{k:'pago:pagado',l:'Pagados',g:'ok'}
+];
+var _svcFiltros={}; // { 'base':'no', 'precio':'sin', ... }  (se combinan con Y)
+function chipsFiltroServicios(lista){
+  var cuenta={};
+  lista.forEach(function(s){ var e=estadoServicio(s); ['base','precio','editado','horas','cust','pago'].forEach(function(g){ var k=g+':'+e[g]; cuenta[k]=(cuenta[k]||0)+1; }); });
+  return SVC_FILTROS.map(function(f){
+    var on = f.k==='todos' ? !Object.keys(_svcFiltros).length : _svcFiltros[f.k.split(':')[0]]===f.k.split(':')[1];
+    var n = f.k==='todos' ? lista.length : (cuenta[f.k]||0);
+    return '<button type="button" class="fchip'+(f.g?' g-'+f.g:'')+(on?' on':'')+'" onclick="toggleFiltroServicio(\''+f.k+'\')">'+esc(f.l)+'<span class="n">'+n+'</span></button>';
+  }).join('');
+}
+function toggleFiltroServicio(k){
+  if(k==='todos'){ _svcFiltros={}; }
+  else { var p=k.split(':'); if(_svcFiltros[p[0]]===p[1]) delete _svcFiltros[p[0]]; else _svcFiltros[p[0]]=p[1]; }
+  var enPeriodo=DB.servicios.filter(function(s){return inPeriod(s.fecha);});
+  var box=document.getElementById('svc-fchips'); if(box) box.innerHTML=chipsFiltroServicios(enPeriodo);
+  filtrarTablaServicios();
+}
+function fmtFechaHora(iso){
+  if(!iso) return '—';
+  var d=new Date(iso); if(isNaN(d)) return esc(iso);
+  return d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
 }
 function servicioRow(s){
-  var c=calcularServicio(s); var ti=tipoInfo(s.tipo);
+  var e=estadoServicio(s); var c=e.c; var ti=tipoInfo(s.tipo);
   var cd = s.concepto==='casa_descanso' ? ' <span class="pill warn">Casa</span>':'';
   var falta = (s.importeManual==null) && (c.horasTotal==null);
   var pend = falta ? ' <span class="pill warn">Completar</span>' : '';
-  return '<tr><td style="text-align:center"><input type="checkbox" class="svc-chk" value="'+esc(s.id)+'" onchange="actualizarBarraSelServicios()"></td><td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span>'+cd+pend+'</td>'
+  var rev='<div class="rev">'
+    + (e.base==='si' ? '<span class="pill ok" title="Base de salida">Base: '+esc(s.base)+'</span>' : '<span class="pill bad">Sin base</span>')
+    + (e.precio==='manual' ? '<span class="pill info">$ Manual</span>' : e.precio==='auto' ? '<span class="pill ok">$ Auto</span>' : '<span class="pill bad">Sin precio</span>')
+    + (e.editado==='si' ? '<span class="pill ok" title="Editado por '+esc(s.updatedBy||'')+'">✎ Editado</span>' : '<span class="pill off">Sin editar</span>')
+    + '</div>';
+  var attrs=' data-id="'+esc(s.id)+'" data-base="'+e.base+'" data-precio="'+e.precio+'" data-editado="'+e.editado+'" data-horas="'+e.horas+'" data-cust="'+e.cust+'" data-pago="'+e.pago+'"';
+  return '<tr class="svc-row"'+attrs+'><td style="text-align:center"><button type="button" class="svc-tog" title="Ver detalles" onclick="toggleDetalleServicio(\''+s.id+'\')">▶</button></td>'
+    +'<td style="text-align:center"><input type="checkbox" class="svc-chk" value="'+esc(s.id)+'" onchange="actualizarBarraSelServicios()"></td><td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span>'+cd+pend+'</td>'
     +'<td>'+esc(clienteNombre(s.clienteId))+'</td>'
     +'<td class="small">'+esc(s.origen||'—')+' → '+esc(s.destino||'—')+'</td>'
     +'<td class="small">'+(c.horasTotal!=null?c.horasTotal.toFixed(1)+' h':'—')+'</td>'
     +'<td class="small">'+esc(c.zonaAplicada)+'</td>'
+    +'<td>'+rev+'</td>'
     +'<td class="right"><b>'+money(c.importeTotal)+'</b><div class="small muted">'+money(c.importePorCustodio)+' × '+c.nCustodios+'</div></td>'
-    +'<td class="right actions"><button class="btn btn-sm btn-accent" onclick="cargarServicio(\''+s.id+'\')">Editar</button><button class="btn btn-sm" onclick="verAuditoria(\''+s.id+'\')">Auditoría</button><button class="btn btn-sm btn-danger" onclick="delServicio(\''+s.id+'\')">Borrar</button></td></tr>';
+    +'<td class="right actions"><button class="btn btn-sm btn-accent" onclick="cargarServicio(\''+s.id+'\')">Editar</button><button class="btn btn-sm" onclick="verAuditoria(\''+s.id+'\')">Auditoría</button><button class="btn btn-sm btn-danger" onclick="delServicio(\''+s.id+'\')">Borrar</button></td></tr>'
+    +'<tr class="svc-det" data-for="'+esc(s.id)+'" style="display:none"><td colspan="10"></td></tr>';
+}
+function detalleServicioHTML(s){
+  var e=estadoServicio(s), c=e.c;
+  function r(k,v){ return '<div class="r"><span class="k">'+k+'</span><span class="v">'+(v==null||v===''?'<span class="muted">—</span>':v)+'</span></div>'; }
+  var custs=(s.custodios||[]).map(function(id){ var cu=custodioById(id); return cu ? esc((cu.numEmpleado?cu.numEmpleado+' ':'')+cu.nombre) : '<span class="muted">(id '+esc(id)+')</span>'; });
+  var hi=(s.fechaInicio||s.fecha||'')+' '+(s.horaInicio||s.hInicio||'');
+  var hf=(s.fechaFin||s.fechaInicio||s.fecha||'')+' '+(s.horaFin||s.hTermino||'');
+  return '<div class="det-wrap">'
+    +'<div class="det-box b-ruta"><h4 style="color:var(--accent)">Servicio y ruta</h4>'
+      +r('Tipo',esc(tipoInfo(s.tipo).label))+r('Cliente',esc(clienteNombre(s.clienteId)))+r('Fecha',esc(s.fecha))
+      +r('Concepto',s.concepto==='casa_descanso'?'Casa de Descanso':'Gasto operativo')
+      +r('Base de salida', s.base?esc(s.base):'<span class="pill bad">Sin base</span>')
+      +r('Origen',esc((s.origen||'')+(s.estadoOrigen?' ('+s.estadoOrigen+')':'')))
+      +r('Destino',esc((s.destino||'')+(s.estadoDestino?' ('+s.estadoDestino+')':'')))
+      +(s.eco?r('Eco',esc(s.eco)):'')
+    +'</div>'
+    +'<div class="det-box b-hrs"><h4 style="color:#7c3aed">Horarios</h4>'
+      +r('Inicio',esc(hi.trim()))+r('Fin',esc(hf.trim()))
+      +r('Horas de servicio',c.horasServicio!=null?c.horasServicio.toFixed(2)+' h':null)
+      +r('Trayecto (T1+T3)',c.horasTraslado?c.horasTraslado.toFixed(2)+' h':null)
+      +r('Horas totales','<b>'+(c.horasTotal!=null?c.horasTotal.toFixed(2)+' h':'—')+'</b>')
+    +'</div>'
+    +'<div class="det-box b-imp"><h4 style="color:var(--ok)">Precio / importe</h4>'
+      +r('Tipo de precio', e.precio==='manual'?'<span class="pill info">Manual</span>':e.precio==='auto'?'<span class="pill ok">Automático</span>':'<span class="pill bad">Sin precio</span>')
+      +r('Zona aplicada',esc(c.zonaAplicada))
+      +r('Por custodio',money(c.importePorCustodio))+r('Custodios',c.nCustodios)
+      +r('Total','<b>'+money(c.importeTotal)+'</b>')
+      +r('Estatus de pago', s.estatusPago==='pagado'?'<span class="pill ok">Pagado</span>':'<span class="pill warn">Pendiente</span>')
+      +'<div class="small muted" style="margin-top:6px">'+c.reglas.map(esc).join('<br>')+'</div>'
+    +'</div>'
+    +'<div class="det-box b-aud"><h4 style="color:var(--warn)">Custodios y auditoría</h4>'
+      +'<div style="font-size:13px;margin-bottom:6px">'+(custs.length?custs.join('<br>'):'<span class="pill bad">Sin custodios</span>')+'</div>'
+      +r('Origen del registro', s.importado?'Importado':'Captura manual')
+      +r('Creado',esc(s.createdBy||'')+' · '+fmtFechaHora(s.createdAt))
+      +r('Última edición', e.editado==='si' ? esc(s.updatedBy||'')+' · '+fmtFechaHora(s.updatedAt) : '<span class="pill off">Sin editar</span>')
+      +(s.obs?'<div class="small" style="margin-top:6px"><b>Obs:</b> '+esc(s.obs)+'</div>':'')
+    +'</div>'
+  +'</div>';
+}
+function toggleDetalleServicio(id, forzar){
+  var row=document.querySelector('#svc-tbody tr.svc-row[data-id="'+id+'"]');
+  var det=document.querySelector('#svc-tbody tr.svc-det[data-for="'+id+'"]');
+  if(!row||!det) return;
+  var abrir = forzar!=null ? forzar : det.style.display==='none';
+  if(abrir){
+    var s=DB.servicios.find(function(x){return x.id===id;}); if(!s) return;
+    det.firstChild.innerHTML=detalleServicioHTML(s);
+    det.style.display = row.style.display==='none' ? 'none' : '';
+  } else det.style.display='none';
+  row.classList.toggle('open',abrir);
+  var b=row.querySelector('.svc-tog'); if(b) b.classList.toggle('open',abrir);
+}
+function expandirTodosServicios(){
+  var rows=Array.prototype.slice.call(document.querySelectorAll('#svc-tbody tr.svc-row')).filter(function(tr){return tr.style.display!=='none';});
+  var abrir = rows.some(function(tr){ return !tr.classList.contains('open'); });
+  rows.forEach(function(tr){ toggleDetalleServicio(tr.getAttribute('data-id'), abrir); });
+  var b=document.getElementById('svc-expall'); if(b) b.textContent = abrir ? '▾ Ocultar detalles' : '▸ Ver detalles de todos';
 }
 function leerServicioForm(){
   return {
@@ -1306,14 +1441,18 @@ function verAuditoria(id){
   alert('AUDITORÍA\\n\\nConsecutivo: '+s.cons+'\\nCreado por: '+(s.createdBy||'—')+'\\nFecha creación: '+(s.createdAt||'—')+'\\nÚltima modificación: '+(s.updatedAt||'—')+'\\nModificado por: '+(s.updatedBy||'—'));
 }
 function filtrarTablaServicios(){
-  var q=(document.getElementById('svc-search').value||'').toLowerCase().trim();
+  var qel=document.getElementById('svc-search');
+  var q=((qel&&qel.value)||'').toLowerCase().trim();
   var tbody=document.getElementById('svc-tbody');
   if(!tbody) return;
-  var rows=tbody.querySelectorAll('tr');
-  rows.forEach(function(tr){
-    if(!q){ tr.style.display=''; return; }
-    var txt=tr.textContent.toLowerCase();
-    tr.style.display=txt.indexOf(q)>=0?'':'none';
+  var grupos=Object.keys(_svcFiltros);
+  tbody.querySelectorAll('tr.svc-row').forEach(function(tr){
+    var ok = !q || tr.textContent.toLowerCase().indexOf(q)>=0;
+    if(ok) grupos.forEach(function(g){ if(tr.getAttribute('data-'+g)!==_svcFiltros[g]) ok=false; });
+    tr.style.display = ok ? '' : 'none';
+    var det=tbody.querySelector('tr.svc-det[data-for="'+tr.getAttribute('data-id')+'"]');
+    if(det) det.style.display = (ok && tr.classList.contains('open')) ? '' : 'none';
+    if(!ok){ var chk=tr.querySelector('.svc-chk'); if(chk && chk.checked) chk.checked=false; }
   });
   actualizarBarraSelServicios();
 }
@@ -1354,6 +1493,7 @@ function after_servicios(){
   });
   recalc();
   actualizarConteoCust();
+  if(Object.keys(_svcFiltros).length) filtrarTablaServicios();
 }
 
 /* ---- Cálculo de ruta GPS (Nominatim + OSRM) ---- */
