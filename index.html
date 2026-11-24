@@ -1882,6 +1882,11 @@ function _cpDatos(id){
 function _cpFH(f,h){ return _fFecha(f)+(h?(' '+h):''); }   // "18/11 08:30"
 function _cpCliente(s){ var n=s.clienteId?clienteNombre(s.clienteId):''; return (n&&n!=='—')?n:(s.clienteNom||''); }
 function _cpSupervisor(s){ var m=String(s.obs||'').match(/Supervisor:\s*([^·]+)/i); return m?m[1].trim():''; }
+function _cpComentario(s, quitarCasa){
+  var partes=String(s.obs||'').split('·').map(function(x){return x.trim();}).filter(Boolean);
+  if(quitarCasa) partes=partes.filter(function(x){ return !/^(supervisor|unidad)\s*:/i.test(x) && !/^casa de descanso/i.test(x); });
+  return partes.join(' · ');
+}
 function _cpUnidad(s){ if(s.eco) return String(s.eco); var m=String(s.obs||'').match(/Unidad:\s*([^·]+)/i); return m?m[1].trim():''; }
 
 function comprobanteHTML(id){
@@ -1900,11 +1905,11 @@ function comprobanteHTML(id){
         +'<td class="small" style="white-space:nowrap">'+esc(_cpFH(s.fechaInicio||s.fecha,s.horaInicio))+'</td>'
         +'<td class="small" style="white-space:nowrap">'+esc(_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin))+'</td>'
         +'<td class="small" style="white-space:nowrap">'+hrs+'</td>'
-        +'<td class="small">'+esc(c.zonaAplicada)+'<div class="muted" style="font-size:11px">'+esc(c.reglas.join(' · '))+'</div></td>'
+        +'<td class="small">'+esc(c.zonaAplicada)+(_cpComentario(s)?'<div class="muted" style="font-size:11px">📝 '+esc(_cpComentario(s))+'</div>':'')+'</td>'
         +'<td class="right"><b>'+money(c.importePorCustodio)+'</b></td></tr>';
     }).join('');
     return '<div class="card"><div class="card-h"><h2>Gastos operativos de servicio</h2><div class="grow"></div><span class="sub">'+arr.length+' servicio'+(arr.length===1?'':'s')+' · '+fmtH(d.hOper)+' · Subtotal '+money(d.subOper)+'</span></div>'
-      +'<div class="tbl-wrap"><table><thead><tr><th>Servicio / Cliente</th><th>Ruta</th><th>Inicio</th><th>Término</th><th>Horas</th><th>Zona / regla</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Servicio / Cliente</th><th>Ruta</th><th>Inicio</th><th>Término</th><th>Horas</th><th>Zona / comentarios</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody>'
       +'<tfoot><tr><td colspan="4" class="right small"><b>Total de la semana</b></td><td class="small"><b>'+fmtH(d.hOper)+'</b></td><td></td><td class="right"><b>'+money(d.subOper)+'</b></td></tr></tfoot></table></div></div>';
   }
   // Casa Querétaro: entrada, salida, horas de estancia, unidad y supervisor
@@ -1917,11 +1922,11 @@ function comprobanteHTML(id){
         +'<td class="small" style="white-space:nowrap">'+(c.horasTotal!=null&&c.horasTotal>0?'<b>'+fmtH(c.horasTotal)+'</b>':'<span class="pill warn">Revisar horas</span>')+'</td>'
         +'<td class="small">'+esc(uni||'—')+'</td>'
         +'<td class="small">'+esc(sup||'—')+'</td>'
-        +'<td class="small muted" style="font-size:11px">'+esc(c.reglas.join(' · '))+'</td>'
+        +'<td class="small muted" style="font-size:11px">'+(_cpComentario(s,true)?'📝 '+esc(_cpComentario(s,true)):'')+'</td>'
         +'<td class="right"><b>'+money(c.importePorCustodio)+'</b></td></tr>';
     }).join('');
     return '<div class="card"><div class="card-h"><h2>Viáticos Casa de Descanso (Querétaro)</h2><div class="grow"></div><span class="sub">'+arr.length+' estancia'+(arr.length===1?'':'s')+' · '+fmtH(d.hCasa)+' · Subtotal '+money(d.subCasa)+'</span></div>'
-      +'<div class="tbl-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>Horas</th><th>Unidad</th><th>Supervisor</th><th>Regla aplicada</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>Horas</th><th>Unidad</th><th>Supervisor</th><th>Comentarios</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody>'
       +'<tfoot><tr><td colspan="2" class="right small"><b>Total de la semana</b></td><td class="small"><b>'+fmtH(d.hCasa)+'</b></td><td colspan="3"></td><td class="right"><b>'+money(d.subCasa)+'</b></td></tr></tfoot></table></div></div>';
   }
 
@@ -2007,6 +2012,7 @@ function comprobanteTexto(d){
       L.push('    '+(s.origen||'—')+' → '+(s.destino||'—'));
       L.push('    Inicio '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' · Fin '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
       L.push('    '+(k.horasTotal!=null?fmtH(k.horasTotal):'sin horas')+((k.horasTraslado||0)>0?(' (incl. '+fmtH(k.horasTraslado)+' trayecto)'):'')+' · *'+money(k.importePorCustodio)+'*');
+      if(_cpComentario(s)) L.push('    📝 '+_cpComentario(s));
     });
     L.push('Horas: '+fmtH(d.hOper)+' · Subtotal: *'+money(d.subOper)+'*');
     L.push('');
@@ -2017,6 +2023,7 @@ function comprobanteTexto(d){
       var k=calcularServicio(s), uni=_cpUnidad(s);
       L.push('▫️ Entrada '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' → Salida '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
       L.push('    '+(k.horasTotal!=null?fmtH(k.horasTotal):'sin horas')+(uni?(' · Unidad '+uni):'')+' · *'+money(k.importePorCustodio)+'*');
+      if(_cpComentario(s,true)) L.push('    📝 '+_cpComentario(s,true));
     });
     L.push('Horas: '+fmtH(d.hCasa)+' · Subtotal: *'+money(d.subCasa)+'*');
     L.push('');
