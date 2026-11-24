@@ -195,6 +195,7 @@
   @media(max-width:560px){
     .kpis,.g2,.g3,.g4,.filters{grid-template-columns:1fr}
   }
+  .cp-doc tfoot td{padding:10px 14px;border-top:2px solid var(--line2);background:var(--soft2,#f8fafc)}
   @media print{
     .sidebar,.topbar,.no-print{display:none!important}
     .app{display:block} .content{padding:0;max-width:none}
@@ -202,6 +203,9 @@
     body{font-size:13px}
     .cp-doc{page-break-after:always}
     .cp-doc:last-child{page-break-after:auto}
+    body.print-solo .cp-doc:not(.print-this){display:none!important}
+    body.print-solo .cp-doc.print-this{page-break-after:auto}
+    body.print-solo #cp-out > :not(.cp-doc){display:none!important}
   }
   /* Lista con buscador (se aplica sola a los select con muchas opciones) */
   .ss-wrap{position:relative}
@@ -858,11 +862,12 @@ function viewCustodios(){
   var rows=DB.custodios.map(function(c){
     return '<tr><td><b>'+esc(c.numEmpleado||'—')+'</b></td><td>'+esc(c.nombre)+'</td>'
       +'<td>'+esc(c.base||'—')+'</td>'
+      +'<td class="small">'+(c.whatsapp?'📲 '+esc(fmtTel(c.whatsapp)):'<span class="muted">—</span>')+'</td>'
       +'<td class="small">'+(c.fechaIngreso?esc(c.fechaIngreso)+(fondoDe(c,semanaHoy())?' <span class="pill warn">Fondo</span>':''):'—')+'</td>'
-      +'<td>'+(c.activo!==false?'<span class="pill ok">Activo</span>':'<span class="pill off">Inactivo</span>')+'</td>'
+      +'<td>'+_pillEstado(c.activo!==false?'activo':(c.estado&&c.estado!=='activo'?c.estado:'inactivo'))+'</td>'
       +'<td class="right actions"><button class="btn btn-sm" onclick="editCustodio(\''+c.id+'\')">Editar</button>'
       +'<button class="btn btn-sm" onclick="toggleCustodio(\''+c.id+'\')">'+(c.activo!==false?'Inactivar':'Activar')+'</button></td></tr>';
-  }).join('') || '<tr><td colspan="6" class="empty">Sin custodios. Agrega el primero arriba.</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="empty">Sin custodios. Agrega el primero arriba.</td></tr>';
   return ''
   + '<div class="card"><div class="card-h"><h2>Alta de custodio</h2></div>'
   +   '<div class="grid g4">'
@@ -870,7 +875,9 @@ function viewCustodios(){
   +     '<div style="grid-column:span 2"><label class="fl">Nombre completo</label><input class="inp" id="cu-nom" placeholder="APELLIDOS NOMBRE" oninput="this.value=this.value.toUpperCase()"></div>'
   +     '<div><label class="fl">Base principal</label>'+selectHTML('cu-base',BASES,'')+'</div>'
   +     '<div><label class="fl">Fecha de ingreso (si es nuevo)</label><input class="inp" type="date" id="cu-ing"></div>'
+  +     '<div><label class="fl">WhatsApp (10 dígitos)</label><input class="inp" id="cu-wa" placeholder="55 1234 5678" inputmode="tel"></div>'
   +   '</div>'
+  +   '<div class="small muted" style="margin-top:8px">Para cargar teléfonos y estados de todos, usa <b>Importar → Catálogo de elementos RH</b>.</div>'
   +   '<div style="margin-top:12px"><button class="btn btn-primary" onclick="addCustodio()">+ Agregar custodio</button></div>'
   + '</div>'
   + '<div class="card"><div class="card-h"><h2>Custodios</h2><div class="grow"></div>'
@@ -878,7 +885,7 @@ function viewCustodios(){
   +     '<span class="sub" style="margin-left:8px">'+DB.custodios.filter(function(c){return c.activo!==false;}).length+' activos</span></div>'
   +   '<input class="inp" id="cu-search" placeholder="🔍 Buscar por nombre, número o base…" autocomplete="off" oninput="filtrarCatalogo(\'cu\')" style="margin:6px 0 10px;max-width:360px">'
   +   '<div id="cu-dup"></div>'
-  +   '<div class="tbl-wrap"><table><thead><tr><th>N° emp.</th><th>Nombre</th><th>Base</th><th>Ingreso</th><th>Estatus</th><th class="right">Acciones</th></tr></thead><tbody id="cu-tbody">'+rows+'</tbody></table></div></div>';
+  +   '<div class="tbl-wrap"><table><thead><tr><th>N° emp.</th><th>Nombre</th><th>Base</th><th>WhatsApp</th><th>Ingreso</th><th>Estatus</th><th class="right">Acciones</th></tr></thead><tbody id="cu-tbody">'+rows+'</tbody></table></div></div>';
 }
 function addCustodio(){
   var num=document.getElementById('cu-num').value.trim();
@@ -886,7 +893,8 @@ function addCustodio(){
   var base=document.getElementById('cu-base').value;
   var ing=(document.getElementById('cu-ing')||{}).value||'';
   if(!nom){ toast('Escribe el nombre del custodio'); return; }
-  var nuevo={id:uid(),numEmpleado:num,nombre:nom,base:base,activo:true}; if(ing) nuevo.fechaIngreso=ing;
+  var nuevo={id:uid(),numEmpleado:num,nombre:nom,base:base,activo:true,estado:'activo'}; if(ing) nuevo.fechaIngreso=ing;
+  var wa=normTel((document.getElementById('cu-wa')||{}).value||''); if(wa) nuevo.whatsapp=wa;
   DB.custodios.push(stamp(nuevo,true));
   persist(); toast('Custodio agregado'); render();
 }
@@ -895,11 +903,13 @@ function editCustodio(id){
   var nom=prompt('Nombre completo:',c.nombre); if(nom==null)return; c.nombre=nom.trim().toUpperCase();
   var num=prompt('N° de empleado:',c.numEmpleado||''); if(num!=null) c.numEmpleado=num.trim();
   var base=prompt('Base:',c.base||''); if(base!=null) c.base=base.trim();
+  var wa=prompt('WhatsApp (10 dígitos) — vacío para quitarlo:', c.whatsapp||'');
+  if(wa!=null){ wa=wa.trim(); if(!wa) delete c.whatsapp; else { var t=normTel(wa); if(t) c.whatsapp=t; else toast('WhatsApp no válido, no se cambió'); } }
   var ing=prompt('Fecha de ingreso (dd/mm/aaaa) — déjalo vacío si no es nuevo:', c.fechaIngreso?c.fechaIngreso.split('-').reverse().join('/'):'');
   if(ing!=null){ ing=ing.trim(); if(!ing) delete c.fechaIngreso; else { var fi=aFecha(ing); if(fi) c.fechaIngreso=fi; else toast('Fecha de ingreso no válida, no se cambió'); } }
   stamp(c,false); persist(); render();
 }
-function toggleCustodio(id){ var c=custodioById(id); if(c){c.activo=(c.activo===false);stamp(c,false);} persist(); render(); }
+function toggleCustodio(id){ var c=custodioById(id); if(c){c.activo=(c.activo===false); c.estado=c.activo?'activo':'inactivo'; stamp(c,false);} persist(); render(); }
 
 /* ====================================================================
    BÚSQUEDA (lupa) Y UNIÓN DE DUPLICADOS EN CATÁLOGOS
@@ -1787,7 +1797,7 @@ function after_incidencias(){ var f=document.getElementById('i-fecha'); if(f&&!f
 function viewComprobante(){
   var custs=DB.custodios.slice().sort(function(a,b){ return String(a.numEmpleado||'').localeCompare(String(b.numEmpleado||''),'es',{numeric:true}); });
   var lista = custs.length
-    ? custs.map(function(c){ return '<label class="cust-opt" data-id="'+c.id+'"><input type="checkbox" class="cp-chk" value="'+c.id+'" onchange="this.closest(\'.cust-opt\').classList.toggle(\'on\',this.checked);actualizarSelComprobante()"> '+esc((c.numEmpleado?c.numEmpleado+' ':'')+c.nombre)+(c.base?(' <span class="muted small">· '+esc(c.base)+'</span>'):'')+'</label>'; }).join('')
+    ? custs.map(function(c){ return '<label class="cust-opt" data-id="'+c.id+'"><input type="checkbox" class="cp-chk" value="'+c.id+'" onchange="this.closest(\'.cust-opt\').classList.toggle(\'on\',this.checked);actualizarSelComprobante()"> '+esc((c.numEmpleado?c.numEmpleado+' ':'')+c.nombre)+(c.base?(' <span class="muted small">· '+esc(c.base)+'</span>'):'')+(c.whatsapp?' <span title="Tiene WhatsApp" style="font-size:11px">📲</span>':'')+(c.activo===false?' <span class="muted small">('+(c.estado==='pausa'?'en pausa':c.estado==='baja'?'baja':'inactivo')+')</span>':'')+'</label>'; }).join('')
     : '<span class="muted small">No hay custodios. Agrega alguno en el catálogo de Custodios.</span>';
   return ''
   + '<div class="card no-print"><div class="card-h"><h2>Generar comprobantes</h2></div>'
@@ -1847,69 +1857,206 @@ function exportarComprobantesPDF(){
   genComprobante();
   setTimeout(function(){ window.print(); }, 80); // deja que rendericen antes de abrir el diálogo de impresión/PDF
 }
-function comprobanteHTML(id){
+/* ---- Datos del comprobante (se usan para la vista, el PDF y el mensaje de WhatsApp) ---- */
+function _cpDatos(id){
   var cust=custodioById(id);
   var serv=DB.servicios.filter(function(s){return inPeriod(s.fecha)&&(s.custodios||[]).indexOf(id)>=0;});
-  var operativos=serv.filter(function(s){return s.concepto!=='casa_descanso';});
+  var ord=function(a,b){ return String((a.fechaInicio||a.fecha||'')+(a.horaInicio||'')).localeCompare(String((b.fechaInicio||b.fecha||'')+(b.horaInicio||''))); };
+  var operativos=serv.filter(function(s){return s.concepto!=='casa_descanso';}).sort(ord);
   var casa=serv.filter(function(s){return s.concepto==='casa_descanso';})
-    .concat(casaPeriodo().filter(function(s){return s.custodios.indexOf(id)>=0;}));
+    .concat(casaPeriodo().filter(function(s){return s.custodios.indexOf(id)>=0;})).sort(ord);
   var fijos=DB.fijos.filter(function(f){return inPeriod(f.fecha)&&f.custodioId===id;});
   var recargas=DB.recargas.filter(function(r){return inPeriod(r.fecha)&&r.custodioId===id;});
   var inci=DB.incidencias.filter(function(x){return inPeriod(x.fecha)&&x.custodioId===id;});
+  var d={id:id,cust:cust,operativos:operativos,casa:casa,fijos:fijos,recargas:recargas,inci:inci};
+  d.subOper=0; d.hOper=0; operativos.forEach(function(s){ var c=calcularServicio(s); d.subOper+=c.importePorCustodio; d.hOper+=(c.horasTotal||0); });
+  d.subCasa=0; d.hCasa=0; casa.forEach(function(s){ var c=calcularServicio(s); d.subCasa+=c.importePorCustodio; d.hCasa+=(c.horasTotal||0); });
+  d.subFijos=fijos.reduce(function(a,f){return a+(+f.importe||0);},0);
+  d.subRec=recargas.reduce(function(a,r){return a+(+r.monto||0);},0);
+  d.subInci=inci.reduce(function(a,i){return a+(i.signo==='resta'?-(+i.monto||0):(+i.monto||0));},0);
+  var fondoC=cust?fondoDe(cust, periodVal()):null; if(fondoC && fondoC.estado==='no_aplica') fondoC=null;
+  d.fondoC=fondoC; d.subFondo=fondoC?fondoC.monto:0;
+  d.total=d.subOper+d.subCasa+d.subFijos+d.subRec+d.subInci+d.subFondo;
+  return d;
+}
+function _cpFH(f,h){ return _fFecha(f)+(h?(' '+h):''); }   // "18/11 08:30"
+function _cpCliente(s){ var n=s.clienteId?clienteNombre(s.clienteId):''; return (n&&n!=='—')?n:(s.clienteNom||''); }
+function _cpSupervisor(s){ var m=String(s.obs||'').match(/Supervisor:\s*([^·]+)/i); return m?m[1].trim():''; }
+function _cpUnidad(s){ if(s.eco) return String(s.eco); var m=String(s.obs||'').match(/Unidad:\s*([^·]+)/i); return m?m[1].trim():''; }
 
-  function servBlock(arr,titulo){
+function comprobanteHTML(id){
+  var d=_cpDatos(id), cust=d.cust;
+
+  // Servicios operativos: cliente, inicio, término y desglose de horas
+  function operBlock(arr){
     if(!arr.length) return '';
-    var sub=0;
-    var arrOrd = arr.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); });
-    var rows=arrOrd.map(function(s){
-      var c=calcularServicio(s); sub+=c.importePorCustodio; var ti=tipoInfo(s.tipo);
-      return '<tr><td class="small">'+esc(s.fecha||'—')+'</td>'
-        +'<td><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span></td>'
-        +'<td class="small">'+esc(s.origen||'—')+' → '+esc(s.destino||'—')+'</td>'
-        +'<td class="small">'+(c.horasTotal!=null?c.horasTotal.toFixed(1)+' h':'—')+'</td>'
-        +'<td class="small">'+esc(c.zonaAplicada)+'</td>'
-        +'<td class="small">'+esc(c.reglas.join(' · '))+'</td>'
+    var rows=arr.map(function(s){
+      var c=calcularServicio(s), ti=tipoInfo(s.tipo), cli=_cpCliente(s);
+      var hrs = c.horasTotal!=null
+        ? '<b>'+fmtH(c.horasTotal)+'</b>'+((c.horasTraslado||0)>0?'<div class="muted" style="font-size:11px">'+fmtH(c.horasServicio||0)+' servicio + '+fmtH(c.horasTraslado)+' trayecto</div>':'')
+        : '<span class="pill warn">Sin horas</span>';
+      return '<tr><td class="small"><span class="cons '+ti.cls+'">'+esc(ti.key)+esc(s.cons)+'</span>'+(cli?'<div class="small" style="margin-top:3px;font-weight:600">'+esc(cli)+'</div>':'')+'</td>'
+        +'<td class="small">'+esc(s.origen||'—')+(s.estadoOrigen?' <span class="muted">('+esc(s.estadoOrigen)+')</span>':'')+'<br>→ '+esc(s.destino||'—')+(s.estadoDestino?' <span class="muted">('+esc(s.estadoDestino)+')</span>':'')+'</td>'
+        +'<td class="small" style="white-space:nowrap">'+esc(_cpFH(s.fechaInicio||s.fecha,s.horaInicio))+'</td>'
+        +'<td class="small" style="white-space:nowrap">'+esc(_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin))+'</td>'
+        +'<td class="small" style="white-space:nowrap">'+hrs+'</td>'
+        +'<td class="small">'+esc(c.zonaAplicada)+'<div class="muted" style="font-size:11px">'+esc(c.reglas.join(' · '))+'</div></td>'
         +'<td class="right"><b>'+money(c.importePorCustodio)+'</b></td></tr>';
     }).join('');
-    return '<div class="card"><div class="card-h"><h2>'+esc(titulo)+'</h2><div class="grow"></div><span class="sub">Subtotal '+money(sub)+'</span></div>'
-      +'<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Servicio</th><th>Ruta</th><th>Horas</th><th>Zona</th><th>Regla aplicada</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+    return '<div class="card"><div class="card-h"><h2>Gastos operativos de servicio</h2><div class="grow"></div><span class="sub">'+arr.length+' servicio'+(arr.length===1?'':'s')+' · '+fmtH(d.hOper)+' · Subtotal '+money(d.subOper)+'</span></div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Servicio / Cliente</th><th>Ruta</th><th>Inicio</th><th>Término</th><th>Horas</th><th>Zona / regla</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody>'
+      +'<tfoot><tr><td colspan="4" class="right small"><b>Total de la semana</b></td><td class="small"><b>'+fmtH(d.hOper)+'</b></td><td></td><td class="right"><b>'+money(d.subOper)+'</b></td></tr></tfoot></table></div></div>';
   }
-  var subOper=operativos.reduce(function(a,s){return a+calcularServicio(s).importePorCustodio;},0);
-  var subCasa=casa.reduce(function(a,s){return a+calcularServicio(s).importePorCustodio;},0);
-  var subFijos=fijos.reduce(function(a,f){return a+(+f.importe||0);},0);
-  var subRec=recargas.reduce(function(a,r){return a+(+r.monto||0);},0);
-  var subInci=inci.reduce(function(a,i){return a+(i.signo==='resta'?-(+i.monto||0):(+i.monto||0));},0);
-  var fondoC=fondoDe(cust, periodVal()); if(fondoC && fondoC.estado==='no_aplica') fondoC=null;
-  var subFondo=fondoC?fondoC.monto:0;
-  var totalFinal=subOper+subCasa+subFijos+subRec+subInci+subFondo;
+  // Casa Querétaro: entrada, salida, horas de estancia, unidad y supervisor
+  function casaBlock(arr){
+    if(!arr.length) return '';
+    var rows=arr.map(function(s){
+      var c=calcularServicio(s), uni=_cpUnidad(s), sup=_cpSupervisor(s);
+      return '<tr><td class="small" style="white-space:nowrap"><b>'+esc(_cpFH(s.fechaInicio||s.fecha,s.horaInicio))+'</b></td>'
+        +'<td class="small" style="white-space:nowrap"><b>'+esc(_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin))+'</b></td>'
+        +'<td class="small" style="white-space:nowrap">'+(c.horasTotal!=null&&c.horasTotal>0?'<b>'+fmtH(c.horasTotal)+'</b>':'<span class="pill warn">Revisar horas</span>')+'</td>'
+        +'<td class="small">'+esc(uni||'—')+'</td>'
+        +'<td class="small">'+esc(sup||'—')+'</td>'
+        +'<td class="small muted" style="font-size:11px">'+esc(c.reglas.join(' · '))+'</td>'
+        +'<td class="right"><b>'+money(c.importePorCustodio)+'</b></td></tr>';
+    }).join('');
+    return '<div class="card"><div class="card-h"><h2>Viáticos Casa de Descanso (Querétaro)</h2><div class="grow"></div><span class="sub">'+arr.length+' estancia'+(arr.length===1?'':'s')+' · '+fmtH(d.hCasa)+' · Subtotal '+money(d.subCasa)+'</span></div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>Horas</th><th>Unidad</th><th>Supervisor</th><th>Regla aplicada</th><th class="right">Importe</th></tr></thead><tbody>'+rows+'</tbody>'
+      +'<tfoot><tr><td colspan="2" class="right small"><b>Total de la semana</b></td><td class="small"><b>'+fmtH(d.hCasa)+'</b></td><td colspan="3"></td><td class="right"><b>'+money(d.subCasa)+'</b></td></tr></tfoot></table></div></div>';
+  }
 
-  var fijosRows=fijos.map(function(f){return '<tr><td>'+esc(f.servicio)+'</td><td>'+esc(clienteNombre(f.clienteId))+'</td><td class="right"><b>'+money(f.importe)+'</b></td></tr>';}).join('');
-  var recRows=recargas.map(function(r){return '<tr><td>'+esc(r.fecha)+'</td><td>'+esc(r.motivo||'—')+'</td><td class="right"><b>'+money(r.monto)+'</b></td></tr>';}).join('');
-  var inciRows=inci.map(function(i){return '<tr><td>'+esc(i.fecha)+'</td><td>'+esc(i.tipo)+'</td><td class="right"><b style="color:'+(i.signo==='resta'?'var(--danger)':'var(--ok)')+'">'+(i.signo==='resta'?'−':'+')+money(i.monto)+'</b></td></tr>';}).join('');
+  var fijosRows=d.fijos.map(function(f){return '<tr><td>'+esc(f.servicio)+'</td><td>'+esc(clienteNombre(f.clienteId))+'</td><td class="right"><b>'+money(f.importe)+'</b></td></tr>';}).join('');
+  var recRows=d.recargas.map(function(r){return '<tr><td>'+esc(r.fecha)+'</td><td>'+esc(r.motivo||'—')+'</td><td class="right"><b>'+money(r.monto)+'</b></td></tr>';}).join('');
+  var inciRows=d.inci.map(function(i){return '<tr><td>'+esc(i.fecha)+'</td><td>'+esc(i.tipo)+'</td><td class="right"><b style="color:'+(i.signo==='resta'?'var(--danger)':'var(--ok)')+'">'+(i.signo==='resta'?'−':'+')+money(i.monto)+'</b></td></tr>';}).join('');
+  var tel=cust&&cust.whatsapp?cust.whatsapp:'';
+  var fondoC=d.fondoC;
 
-  return '<div class="cp-doc">'
+  return '<div class="cp-doc" data-id="'+esc(id)+'">'
+  + '<div class="card no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:var(--soft2)">'
+  +   '<b style="margin-right:4px">Enviar a '+esc(cust?cust.nombre:'—')+':</b>'
+  +   '<button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="waEnviarTexto(\''+id+'\')">📲 WhatsApp (desglose en texto)</button>'
+  +   '<button class="btn btn-sm" style="background:#128C7E;color:#fff;border-color:#128C7E" onclick="waEnviarPDF(\''+id+'\')">📄 PDF + WhatsApp</button>'
+  +   (tel?'<span class="muted small">'+esc(fmtTel(tel))+'</span>':'<span class="pill warn">Sin WhatsApp registrado</span>')
+  +   '<span class="wa-msg small" style="flex-basis:100%"></span>'
+  + '</div>'
   + '<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">'
   +   '<div><h2 style="font-size:20px">Comprobante de pago</h2><div class="muted">'+esc(cust?cust.nombre:'—')+' · N° '+esc(cust?cust.numEmpleado||'—':'—')+' · Base '+esc(cust?cust.base||'—':'—')+'</div></div>'
   +   '<div class="right"><div class="muted small">Semana</div><b>'+periodLabel()+'</b></div>'
+  + '</div>'
+  + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px" class="small">'
+  +   '<span>Servicios: <b>'+d.operativos.length+'</b> · <b>'+fmtH(d.hOper)+'</b></span>'
+  +   (d.casa.length?'<span>Casa Querétaro: <b>'+d.casa.length+'</b> estancia'+(d.casa.length===1?'':'s')+' · <b>'+fmtH(d.hCasa)+'</b></span>':'')
+  +   '<span>Horas totales de la semana: <b>'+fmtH(d.hOper+d.hCasa)+'</b></span>'
   + '</div></div>'
-  + servBlock(operativos,'Gastos operativos de servicio')
-  + servBlock(casa,'Viáticos Casa de Descanso (Querétaro)')
-  + (fondoC?'<div class="card"><div class="card-h"><h2>Fondo de viáticos · nuevo ingreso</h2><div class="grow"></div><span class="sub">Subtotal '+money(subFondo)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha de ingreso</th><th>Semana del fondo</th><th>Estado</th><th class="right">Importe</th></tr></thead><tbody><tr><td>'+esc(cust.fechaIngreso)+'</td><td>Semana '+fondoC.n+' de '+fondoC.de+'</td><td>'+(fondoC.estado==='pagado'?'Pagado':'Pendiente')+'</td><td class="right"><b>'+money(subFondo)+'</b></td></tr></tbody></table></div></div>':'')
-  + (fijos.length?'<div class="card"><div class="card-h"><h2>Servicios fijos</h2><div class="grow"></div><span class="sub">Subtotal '+money(subFijos)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Servicio</th><th>Cliente</th><th class="right">Importe</th></tr></thead><tbody>'+fijosRows+'</tbody></table></div></div>':'')
-  + (recargas.length?'<div class="card"><div class="card-h"><h2>Recargas telefónicas</h2><div class="grow"></div><span class="sub">Subtotal '+money(subRec)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Motivo</th><th class="right">Monto</th></tr></thead><tbody>'+recRows+'</tbody></table></div></div>':'')
-  + (inci.length?'<div class="card"><div class="card-h"><h2>Incidencias y ajustes</h2><div class="grow"></div><span class="sub">Subtotal '+money(subInci)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th class="right">Monto</th></tr></thead><tbody>'+inciRows+'</tbody></table></div></div>':'')
+  + operBlock(d.operativos)
+  + casaBlock(d.casa)
+  + (fondoC?'<div class="card"><div class="card-h"><h2>Fondo de viáticos · nuevo ingreso</h2><div class="grow"></div><span class="sub">Subtotal '+money(d.subFondo)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha de ingreso</th><th>Semana del fondo</th><th>Estado</th><th class="right">Importe</th></tr></thead><tbody><tr><td>'+esc(cust.fechaIngreso)+'</td><td>Semana '+fondoC.n+' de '+fondoC.de+'</td><td>'+(fondoC.estado==='pagado'?'Pagado':'Pendiente')+'</td><td class="right"><b>'+money(d.subFondo)+'</b></td></tr></tbody></table></div></div>':'')
+  + (d.fijos.length?'<div class="card"><div class="card-h"><h2>Servicios fijos</h2><div class="grow"></div><span class="sub">Subtotal '+money(d.subFijos)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Servicio</th><th>Cliente</th><th class="right">Importe</th></tr></thead><tbody>'+fijosRows+'</tbody></table></div></div>':'')
+  + (d.recargas.length?'<div class="card"><div class="card-h"><h2>Recargas telefónicas</h2><div class="grow"></div><span class="sub">Subtotal '+money(d.subRec)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Motivo</th><th class="right">Monto</th></tr></thead><tbody>'+recRows+'</tbody></table></div></div>':'')
+  + (d.inci.length?'<div class="card"><div class="card-h"><h2>Incidencias y ajustes</h2><div class="grow"></div><span class="sub">Subtotal '+money(d.subInci)+'</span></div><div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th class="right">Monto</th></tr></thead><tbody>'+inciRows+'</tbody></table></div></div>':'')
   + '<div class="card"><div class="evi">'
-  +   '<div class="row"><span class="k">Gastos operativos de servicio</span><span class="v">'+money(subOper)+'</span></div>'
-  +   '<div class="row"><span class="k">Viáticos Casa de Descanso</span><span class="v">'+money(subCasa)+'</span></div>'
-  +   (subFondo?'<div class="row"><span class="k">Fondo de viáticos (nuevo ingreso)</span><span class="v">'+money(subFondo)+'</span></div>':'')
-  +   '<div class="row"><span class="k">Servicios fijos</span><span class="v">'+money(subFijos)+'</span></div>'
-  +   '<div class="row"><span class="k">Recargas telefónicas</span><span class="v">'+money(subRec)+'</span></div>'
-  +   '<div class="row"><span class="k">Incidencias y ajustes</span><span class="v">'+money(subInci)+'</span></div>'
-  +   '<div class="total"><span>Total a pagar</span><span>'+money(totalFinal)+'</span></div>'
+  +   '<div class="row"><span class="k">Gastos operativos de servicio</span><span class="v">'+money(d.subOper)+'</span></div>'
+  +   '<div class="row"><span class="k">Viáticos Casa de Descanso</span><span class="v">'+money(d.subCasa)+'</span></div>'
+  +   (d.subFondo?'<div class="row"><span class="k">Fondo de viáticos (nuevo ingreso)</span><span class="v">'+money(d.subFondo)+'</span></div>':'')
+  +   '<div class="row"><span class="k">Servicios fijos</span><span class="v">'+money(d.subFijos)+'</span></div>'
+  +   '<div class="row"><span class="k">Recargas telefónicas</span><span class="v">'+money(d.subRec)+'</span></div>'
+  +   '<div class="row"><span class="k">Incidencias y ajustes</span><span class="v">'+money(d.subInci)+'</span></div>'
+  +   '<div class="total"><span>Total a pagar</span><span>'+money(d.total)+'</span></div>'
   + '</div></div>'
   + '</div>';
 }
 function after_comprobante(){ /* nada */ }
+
+/* ====================================================================
+   WHATSAPP · envío del comprobante al elemento
+   ==================================================================== */
+// Normaliza un teléfono mexicano a 10 dígitos. Si el texto trae varios ("WHATS 55… / LLAMADAS 55…") prefiere el de WhatsApp.
+function normTel(v){
+  var s=String(v==null?'':v);
+  var segs=s.split(/\/|,|;|\by\b|\bo\b/i);
+  var orden=segs.filter(function(x){return /whats|wa\b/i.test(x);}).concat(segs);
+  for(var i=0;i<orden.length;i++){
+    var dg=orden[i].replace(/\D/g,'');
+    if(dg.length===13 && dg.indexOf('521')===0) dg=dg.slice(3);
+    if(dg.length===12 && dg.indexOf('52')===0) dg=dg.slice(2);
+    if(dg.length===10) return dg;
+  }
+  return '';
+}
+function fmtTel(t){ t=String(t||''); return t.length===10?(t.slice(0,2)+' '+t.slice(2,6)+' '+t.slice(6)):t; }
+function _waTelDe(cust){
+  if(!cust) return '';
+  if(cust.whatsapp) return cust.whatsapp;
+  var v=prompt(cust.nombre+' no tiene WhatsApp registrado.\nEscribe su número a 10 dígitos (se guardará en su ficha):','');
+  if(v==null) return '';
+  var t=normTel(v); if(!t){ toast('Número no válido: deben ser 10 dígitos'); return ''; }
+  cust.whatsapp=t; stamp(cust,false); persist();
+  return t;
+}
+function comprobanteTexto(d){
+  var c=d.cust||{}, L=[];
+  L.push('*COMPROBANTE DE PAGO*');
+  L.push('🗓️ '+periodLabel());
+  L.push('👤 '+(c.nombre||'—')+(c.numEmpleado?(' · N° '+c.numEmpleado):''));
+  L.push('');
+  if(d.operativos.length){
+    L.push('🚚 *Gastos operativos de servicio* ('+d.operativos.length+')');
+    d.operativos.forEach(function(s){
+      var k=calcularServicio(s), ti=tipoInfo(s.tipo), cli=_cpCliente(s);
+      L.push('▫️ '+(ti.key||'')+(s.cons||'')+(cli?(' · '+cli):''));
+      L.push('    '+(s.origen||'—')+' → '+(s.destino||'—'));
+      L.push('    Inicio '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' · Fin '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
+      L.push('    '+(k.horasTotal!=null?fmtH(k.horasTotal):'sin horas')+((k.horasTraslado||0)>0?(' (incl. '+fmtH(k.horasTraslado)+' trayecto)'):'')+' · *'+money(k.importePorCustodio)+'*');
+    });
+    L.push('Horas: '+fmtH(d.hOper)+' · Subtotal: *'+money(d.subOper)+'*');
+    L.push('');
+  }
+  if(d.casa.length){
+    L.push('🏠 *Casa de Descanso Querétaro* ('+d.casa.length+')');
+    d.casa.forEach(function(s){
+      var k=calcularServicio(s), uni=_cpUnidad(s);
+      L.push('▫️ Entrada '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' → Salida '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
+      L.push('    '+(k.horasTotal!=null?fmtH(k.horasTotal):'sin horas')+(uni?(' · Unidad '+uni):'')+' · *'+money(k.importePorCustodio)+'*');
+    });
+    L.push('Horas: '+fmtH(d.hCasa)+' · Subtotal: *'+money(d.subCasa)+'*');
+    L.push('');
+  }
+  if(d.fondoC){ L.push('💼 Fondo de viáticos (nuevo ingreso, semana '+d.fondoC.n+' de '+d.fondoC.de+'): *'+money(d.subFondo)+'*'); }
+  if(d.fijos.length){ L.push('📌 *Servicios fijos*'); d.fijos.forEach(function(f){ L.push('▫️ '+(f.servicio||'—')+' · '+money(f.importe)); }); L.push('Subtotal: *'+money(d.subFijos)+'*'); }
+  if(d.recargas.length){ L.push('📱 *Recargas telefónicas*'); d.recargas.forEach(function(r){ L.push('▫️ '+_fFecha(r.fecha)+' · '+(r.motivo||'Recarga')+' · '+money(r.monto)); }); L.push('Subtotal: *'+money(d.subRec)+'*'); }
+  if(d.inci.length){ L.push('⚖️ *Incidencias y ajustes*'); d.inci.forEach(function(i){ L.push('▫️ '+_fFecha(i.fecha)+' · '+(i.tipo||'')+' · '+(i.signo==='resta'?'−':'+')+money(i.monto)); }); L.push('Subtotal: *'+money(d.subInci)+'*'); }
+  if(d.fondoC||d.fijos.length||d.recargas.length||d.inci.length) L.push('');
+  L.push('⏱️ Horas totales de la semana: '+fmtH(d.hOper+d.hCasa));
+  L.push('💰 *TOTAL A PAGAR: '+money(d.total)+'*');
+  return L.join('\n');
+}
+function _waAbrir(tel, texto, id){
+  var url='https://wa.me/52'+tel+'?text='+encodeURIComponent(texto);
+  var w=window.open(url,'_blank');
+  var box=document.querySelector('.cp-doc[data-id="'+id+'"] .wa-msg');
+  if(box) box.innerHTML = w ? '<span style="color:var(--ok)">✓ Se abrió WhatsApp con el chat de '+esc(fmtTel(tel))+'.</span> Si no abrió, <a href="'+esc(url)+'" target="_blank">haz clic aquí</a>.'
+                            : 'El navegador bloqueó la ventana. <a href="'+esc(url)+'" target="_blank"><b>Abrir chat de WhatsApp</b></a>';
+}
+function waEnviarTexto(id){
+  var d=_cpDatos(id), tel=_waTelDe(d.cust); if(!tel) return;
+  _waAbrir(tel, comprobanteTexto(d), id);
+}
+function waEnviarPDF(id){
+  var d=_cpDatos(id), tel=_waTelDe(d.cust); if(!tel) return;
+  var c=d.cust;
+  var doc=document.querySelector('.cp-doc[data-id="'+id+'"]'); if(!doc) return;
+  // Imprime solo este comprobante, con nombre de archivo sugerido
+  var tituloAnt=document.title;
+  document.title='Comprobante_'+(c.numEmpleado||'')+'_'+String(c.nombre||'').replace(/\s+/g,'_')+'_'+(periodVal()||'');
+  document.body.classList.add('print-solo'); doc.classList.add('print-this');
+  window.print();
+  document.body.classList.remove('print-solo'); doc.classList.remove('print-this'); document.title=tituloAnt;
+  var texto='Hola '+(c.nombre||'')+', te comparto tu *comprobante de pago* de la '+String(periodLabel()).replace(/^Semana/i,'semana')+'.\n'
+    +'Servicios: '+d.operativos.length+(d.casa.length?(' · Casa Querétaro: '+d.casa.length):'')+' · Horas: '+fmtH(d.hOper+d.hCasa)+'\n'
+    +'💰 *Total a pagar: '+money(d.total)+'*\n(Adjunto el PDF con el desglose)';
+  _waAbrir(tel, texto, id);
+  var box=doc.querySelector('.wa-msg'); if(box) box.innerHTML+=' <span class="muted">· Adjunta el PDF que acabas de guardar (clip 📎 → Documento).</span>';
+}
 
 /* ====================================================================
    REPORTES
@@ -2076,7 +2223,7 @@ function viewImportar(){
   + '<div class="card"><div class="card-h"><h2>Importar desde Excel</h2></div>'
   +   '<p class="muted small">Sube la descarga de tu hoja de Drive (.xlsx o .csv). El sistema detecta los encabezados, mapea las columnas y crea los clientes y custodios que no existan. Tú solo editas lo que falte (salida de base y liberación) para que se dispare el cálculo.</p>'
   +   '<div class="grid g2">'
-  +     '<div><label class="fl">¿Qué vas a importar?</label>'+selectHTML('im-tipo',[{v:'servicios',l:'Servicios (hoja de asignación)'},{v:'casa',l:'Casa de Descanso Querétaro (registro de elementos)'},{v:'clientes',l:'Clientes'},{v:'custodios',l:'Custodios'},{v:'recargas',l:'Recargas'}],'servicios','previsualizar()')+'</div>'
+  +     '<div><label class="fl">¿Qué vas a importar?</label>'+selectHTML('im-tipo',[{v:'servicios',l:'Servicios (hoja de asignación)'},{v:'casa',l:'Casa de Descanso Querétaro (registro de elementos)'},{v:'clientes',l:'Clientes'},{v:'custodios',l:'Custodios'},{v:'catalogo',l:'Catálogo de elementos RH (activos / inactivos · WhatsApp)'},{v:'recargas',l:'Recargas'}],'servicios','previsualizar()')+'</div>'
   +     '<div><label class="fl">Archivo (.xlsx / .csv)</label><input class="inp" type="file" id="im-file" accept=".xlsx,.xls,.csv" onchange="previsualizar()"></div>'
   +   '</div>'
   +   '<div id="im-prev" style="margin-top:16px"></div>'
@@ -2291,7 +2438,7 @@ function casaComoServicio(r){
     fecha:r.fechaEntrada, fechaInicio:r.fechaEntrada, horaInicio:r.horaEntrada,
     fechaFin:r.fechaSalida||r.fechaEntrada, horaFin:r.horaSalida, horasTrayecto:0, zona:'nacional',
     origen:'Casa Querétaro', estadoOrigen:'Querétaro', destino:(r.eco?'Unidad '+r.eco:'—'), estadoDestino:'Querétaro',
-    custodios:r.custodios||[], estatusPago:r.estatusPago||'pendiente', obs:r.obs||'' };
+    custodios:r.custodios||[], estatusPago:r.estatusPago||'pendiente', obs:r.obs||'', eco:r.eco||'' };
 }
 function casaPeriodo(){ return casaArr().filter(function(r){return inPeriod(r.fechaEntrada);}).map(casaComoServicio); }
 function casaFiltradaReporte(){
@@ -2673,6 +2820,12 @@ function previsualizar(){
         document.getElementById('im-prev').innerHTML=previewServicios(_parsed);
       } else {
         _importRows=XLSX.utils.sheet_to_json(ws,{defval:''});
+        if(tipo==='catalogo' || (tipo==='custodios' && esCatalogoElementos(_importRows))){
+          document.getElementById('im-tipo').value='catalogo';
+          _parsed=parseCatalogo(_importRows); _parsed.catalogo=true;
+          document.getElementById('im-prev').innerHTML=previewCatalogo(_parsed);
+          return;
+        }
         var cols=_importRows.length?Object.keys(_importRows[0]):[];
         document.getElementById('im-prev').innerHTML='<div class="card"><div class="card-h"><h2>Vista previa ('+_importRows.length+' filas)</h2><div class="grow"></div><button class="btn btn-primary" onclick="confirmarImport()">Importar</button></div>'
           +'<div class="tbl-wrap"><table><thead><tr>'+cols.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'
@@ -2682,6 +2835,95 @@ function previsualizar(){
     }catch(err){ document.getElementById('im-prev').innerHTML='<div class="card"><div class="empty">No se pudo leer el archivo. ('+esc(err.message||err)+')</div></div>'; }
   };
   reader.readAsArrayBuffer(f.files[0]);
+}
+/* ---- Catálogo de elementos (RH): estado ACTIVO / EN PAUSA / BAJA + teléfono WhatsApp ----
+   Cruza por N° de empleado (sin ceros a la izquierda) y, si no hay número, por nombre. */
+function _numKey(n){ return String(n==null?'':n).trim().replace(/\.0+$/,'').replace(/^0+/,''); }
+function _catEstado(v){ var t=nrm(v); if(t.indexOf('baja')>=0) return 'baja'; if(t.indexOf('pausa')>=0) return 'pausa'; return 'activo'; }
+function _catBase(v){ var t=nrm(v); if(!t||t==='-') return ''; if(t.indexOf('morelos')>=0) return 'Morelos'; if(t.indexOf('cdmx')>=0||t.indexOf('mexico')>=0) return 'Ciudad de México'; if(t.indexOf('quer')>=0) return 'Querétaro (Casa de Descanso)'; return String(v).trim(); }
+function _catCol(row, exactos, contiene){
+  for(var k in row){ var kn=nrm(k); if(exactos.indexOf(kn)>=0) return row[k]; }
+  if(contiene) for(var k2 in row){ var kn2=nrm(k2); for(var i=0;i<contiene.length;i++){ if(kn2.indexOf(contiene[i])>=0) return row[k2]; } }
+  return '';
+}
+function esCatalogoElementos(rows){
+  if(!rows.length) return false;
+  var ks=Object.keys(rows[0]).map(nrm).join('|');
+  return ks.indexOf('whatsapp')>=0 || (ks.indexOf('nombre completo')>=0 && ks.indexOf('telefono')>=0 && ks.indexOf('estado')>=0);
+}
+function parseCatalogo(rows){
+  var porNum={}, porNom={};
+  DB.custodios.forEach(function(c){ var k=_numKey(c.numEmpleado); if(k) porNum[k]=c; porNom[nrmNombre(c.nombre)]=c; });
+  var out=[], usados={};
+  rows.forEach(function(r){
+    var num=String(_catCol(r,['no. empleado','no empleado','num empleado','numero de empleado','n° empleado'],['empleado'])||'').trim();
+    var nom=String(_catCol(r,['nombre completo'])||'').trim();
+    if(!nom) nom=(String(_catCol(r,['apellidos'])||'').trim()+' '+String(_catCol(r,['nombre(s)','nombre','nombres'])||'').trim()).trim();
+    nom=nom.replace(/\(\s*inactivo\s*\)/i,'').replace(/\s+/g,' ').trim().toUpperCase();
+    var nk=_numKey(num);
+    if(!nom || /prueba|elemento baja/i.test(nom) || !nk || (+nk>0 && +nk<10)) return;   // filas de prueba
+    var estado=_catEstado(_catCol(r,['estado','estatus']));
+    var wa=normTel(_catCol(r,['whatsapp desglose'],['whatsapp'])) || normTel(_catCol(r,['telefono','teléfono','celular'],['telefono']));
+    var base=_catBase(_catCol(r,['sucursal','base']));
+    var c=porNum[nk] || porNom[nrmNombre(nom)] || null;
+    if(c && usados[c.id]) c=null; usados[c?c.id:'']=1;
+    var cambios=[];
+    if(c){
+      if(wa && wa!==c.whatsapp) cambios.push('WhatsApp');
+      var estAct=c.estado||(c.activo===false?'inactivo':'activo');
+      if(estAct!==estado) cambios.push('Estado');
+      if(!c.numEmpleado && num) cambios.push('N° emp.');
+      if(!c.base && base) cambios.push('Base');
+    }
+    out.push({num:num, nom:nom, estado:estado, wa:wa, base:base, cust:c, cambios:cambios});
+  });
+  var enCat={}; out.forEach(function(x){ if(x.cust) enCat[x.cust.id]=1; });
+  var fuera=DB.custodios.filter(function(c){ return !enCat[c.id]; });
+  return {filas:out, fuera:fuera};
+}
+function _pillEstado(e){
+  return e==='baja'?'<span class="pill off">Baja</span>':e==='pausa'?'<span class="pill warn">En pausa</span>':e==='inactivo'?'<span class="pill off">Inactivo</span>':'<span class="pill ok">Activo</span>';
+}
+function previewCatalogo(p){
+  var F=p.filas;
+  var coinc=F.filter(function(x){return x.cust;}), nuevos=F.filter(function(x){return !x.cust && x.estado!=='baja';}), bajasSin=F.filter(function(x){return !x.cust && x.estado==='baja';});
+  var conCambio=coinc.filter(function(x){return x.cambios.length;}).length;
+  var sinTel=F.filter(function(x){return !x.wa;});
+  var rows=F.map(function(x){
+    var accion = x.cust ? (x.cambios.length?'<span class="pill warn">Actualiza: '+esc(x.cambios.join(', '))+'</span>':'<span class="pill ok">Sin cambios</span>')
+               : x.estado==='baja' ? '<span class="pill off">Se omite (baja, no está en OpsControl)</span>' : '<span class="pill warn">Nuevo</span>';
+    return '<tr><td><b>'+esc(x.num)+'</b></td><td>'+esc(x.nom)+(x.cust&&nrmNombre(x.cust.nombre)!==nrmNombre(x.nom)?'<div class="muted small">En OpsControl: '+esc(x.cust.nombre)+'</div>':'')+'</td>'
+      +'<td>'+_pillEstado(x.estado)+'</td><td class="small">'+(x.wa?esc(fmtTel(x.wa)):'<span class="pill warn">Sin teléfono</span>')+'</td>'
+      +'<td class="small">'+esc(x.base||'—')+'</td><td class="small">'+accion+'</td></tr>';
+  }).join('');
+  return '<div class="card"><div class="card-h"><h2>Catálogo de elementos — vista previa ('+F.length+')</h2><div class="grow"></div><button class="btn btn-primary" onclick="catConfirmarImport()">Aplicar catálogo</button></div>'
+    +'<div class="kpis">'+kpi('Ya existen en OpsControl',coinc.length,conCambio+' con cambios','okk')+kpi('Nuevos',nuevos.length,'Activos / en pausa que no estaban','')+kpi('Sin teléfono',sinTel.length,sinTel.map(function(x){return x.num;}).join(', ')||'—','')+kpi('No vienen en el catálogo',p.fuera.length,'Se quedan igual','')+'</div>'
+    +'<label style="display:flex;gap:8px;align-items:center;margin:6px 0 10px"><input type="checkbox" id="cat-nuevos" checked> Agregar a OpsControl los '+nuevos.length+' elementos nuevos (activos o en pausa)</label>'
+    +'<div class="small muted" style="margin-bottom:10px">Se guarda el WhatsApp (columna «WhatsApp Desglose» o, si está vacía, «Teléfono») y el estado: <b>Activo</b> sigue disponible; <b>En pausa</b> y <b>Baja</b> quedan inactivos (no salen en las listas de captura, pero sus comprobantes se pueden seguir generando). La fecha de ingreso no se toca para no activar el fondo de nuevo ingreso.'+(bajasSin.length?' '+bajasSin.length+' baja(s) que no existen en OpsControl se omiten.':'')+'</div>'
+    +'<div class="tbl-wrap" style="max-height:460px;overflow:auto"><table><thead><tr><th>N° emp.</th><th>Nombre</th><th>Estado</th><th>WhatsApp</th><th>Base</th><th>Acción</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
+function catConfirmarImport(){
+  if(!_parsed||!_parsed.catalogo){ toast('No hay catálogo para aplicar'); return; }
+  var agregar=(document.getElementById('cat-nuevos')||{}).checked!==false;
+  var act=0, nuevos=0;
+  _parsed.filas.forEach(function(x){
+    var c=x.cust;
+    if(c){
+      if(x.wa) c.whatsapp=x.wa;
+      c.estado=x.estado; c.activo=(x.estado==='activo');
+      if(!c.numEmpleado && x.num) c.numEmpleado=x.num;
+      if(!c.base && x.base) c.base=x.base;
+      stamp(c,false); act++;
+    } else if(agregar && x.estado!=='baja'){
+      var n={id:uid(),numEmpleado:x.num,nombre:x.nom,base:x.base,activo:(x.estado==='activo'),estado:x.estado};
+      if(x.wa) n.whatsapp=x.wa;
+      DB.custodios.push(stamp(n,true)); nuevos++;
+    }
+  });
+  persist();
+  document.getElementById('im-prev').innerHTML=''; _parsed=null;
+  toast('Catálogo aplicado: '+act+' actualizados'+(nuevos?(' · '+nuevos+' nuevos'):''));
+  nav('custodios');
 }
 function previewServicios(p){
   var idx=p.idx, S=p.servicios;
@@ -2894,6 +3136,7 @@ function confirmarImport(){
   var tipo=document.getElementById('im-tipo').value;
   _decCliente={}; _decCust={};
   if(tipo==='casa'){ casaConfirmarImport(); return; }
+  if(tipo==='catalogo'){ catConfirmarImport(); return; }
   if(tipo==='servicios'){
     if(!_parsed||!_parsed.servicios.length){ toast('No hay servicios para importar'); return; }
     var cl=distinctClientes(_parsed.servicios.map(function(s){return s.clienteNom;}));
