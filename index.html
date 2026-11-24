@@ -1939,8 +1939,10 @@ function comprobanteHTML(id){
   return '<div class="cp-doc" data-id="'+esc(id)+'">'
   + '<div class="card no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:var(--soft2)">'
   +   '<b style="margin-right:4px">Enviar a '+esc(cust?cust.nombre:'—')+':</b>'
-  +   '<button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="waEnviarTexto(\''+id+'\')">📲 WhatsApp (desglose en texto)</button>'
-  +   '<button class="btn btn-sm" style="background:#128C7E;color:#fff;border-color:#128C7E" onclick="waEnviarPDF(\''+id+'\')">📄 PDF + WhatsApp</button>'
+  +   '<button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-weight:700" onclick="waEnviarImagen(\''+id+'\')">🖼️ Imagen + WhatsApp</button>'
+  +   '<button class="btn btn-sm" onclick="waEnviarTexto(\''+id+'\')">💬 Solo texto</button>'
+  +   '<button class="btn btn-sm" onclick="waEnviarPDF(\''+id+'\')">📄 PDF + WhatsApp</button>'
+  +   '<button class="btn btn-sm" onclick="waDescargarImagen(\''+id+'\')" title="Descargar la imagen del desglose">⬇ Imagen</button>'
   +   (tel?'<span class="muted small">'+esc(fmtTel(tel))+'</span>':'<span class="pill warn">Sin WhatsApp registrado</span>')
   +   '<span class="wa-msg small" style="flex-basis:100%"></span>'
   + '</div>'
@@ -2001,40 +2003,40 @@ function _waTelDe(cust){
 function comprobanteTexto(d){
   var c=d.cust||{}, L=[];
   L.push('*COMPROBANTE DE PAGO*');
-  L.push('🗓️ '+periodLabel());
-  L.push('👤 '+(c.nombre||'—')+(c.numEmpleado?(' · N° '+c.numEmpleado):''));
+  L.push(periodLabel());
+  L.push((c.nombre||'—')+(c.numEmpleado?(' · N° '+c.numEmpleado):''));
   L.push('');
   if(d.operativos.length){
-    L.push('🚚 *Gastos operativos de servicio* ('+d.operativos.length+')');
+    L.push('*Gastos operativos de servicio* ('+d.operativos.length+')');
     d.operativos.forEach(function(s){
       var k=calcularServicio(s), ti=tipoInfo(s.tipo), cli=_cpCliente(s);
-      L.push('▫️ '+(ti.key||'')+(s.cons||'')+(cli?(' · '+cli):''));
+      L.push('- '+(ti.key||'')+(s.cons||'')+(cli?(' · '+cli):''));
       L.push('    '+(s.origen||'—')+' → '+(s.destino||'—'));
       L.push('    Inicio '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' · Fin '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
       L.push('    '+(k.horasTotal!=null?fmtH(k.horasTotal):'sin horas')+((k.horasTraslado||0)>0?(' (incl. '+fmtH(k.horasTraslado)+' trayecto)'):'')+' · *'+money(k.importePorCustodio)+'*');
-      if(_cpComentario(s)) L.push('    📝 '+_cpComentario(s));
+      if(_cpComentario(s)) L.push('    Nota: '+_cpComentario(s));
     });
     L.push('Horas: '+fmtH(d.hOper)+' · Subtotal: *'+money(d.subOper)+'*');
     L.push('');
   }
   if(d.casa.length){
-    L.push('🏠 *Casa de Descanso Querétaro* ('+d.casa.length+')');
+    L.push('*Casa de Descanso Querétaro* ('+d.casa.length+')');
     d.casa.forEach(function(s){
       var k=calcularServicio(s), uni=_cpUnidad(s);
-      L.push('▫️ Entrada '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' → Salida '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
+      L.push('- Entrada '+_cpFH(s.fechaInicio||s.fecha,s.horaInicio)+' → Salida '+_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin));
       L.push('    '+(k.horasTotal!=null?fmtH(k.horasTotal):'sin horas')+(uni?(' · Unidad '+uni):'')+' · *'+money(k.importePorCustodio)+'*');
-      if(_cpComentario(s,true)) L.push('    📝 '+_cpComentario(s,true));
+      if(_cpComentario(s,true)) L.push('    Nota: '+_cpComentario(s,true));
     });
     L.push('Horas: '+fmtH(d.hCasa)+' · Subtotal: *'+money(d.subCasa)+'*');
     L.push('');
   }
-  if(d.fondoC){ L.push('💼 Fondo de viáticos (nuevo ingreso, semana '+d.fondoC.n+' de '+d.fondoC.de+'): *'+money(d.subFondo)+'*'); }
-  if(d.fijos.length){ L.push('📌 *Servicios fijos*'); d.fijos.forEach(function(f){ L.push('▫️ '+(f.servicio||'—')+' · '+money(f.importe)); }); L.push('Subtotal: *'+money(d.subFijos)+'*'); }
-  if(d.recargas.length){ L.push('📱 *Recargas telefónicas*'); d.recargas.forEach(function(r){ L.push('▫️ '+_fFecha(r.fecha)+' · '+(r.motivo||'Recarga')+' · '+money(r.monto)); }); L.push('Subtotal: *'+money(d.subRec)+'*'); }
-  if(d.inci.length){ L.push('⚖️ *Incidencias y ajustes*'); d.inci.forEach(function(i){ L.push('▫️ '+_fFecha(i.fecha)+' · '+(i.tipo||'')+' · '+(i.signo==='resta'?'−':'+')+money(i.monto)); }); L.push('Subtotal: *'+money(d.subInci)+'*'); }
+  if(d.fondoC){ L.push('Fondo de viáticos (nuevo ingreso, semana '+d.fondoC.n+' de '+d.fondoC.de+'): *'+money(d.subFondo)+'*'); }
+  if(d.fijos.length){ L.push('*Servicios fijos*'); d.fijos.forEach(function(f){ L.push('- '+(f.servicio||'—')+' · '+money(f.importe)); }); L.push('Subtotal: *'+money(d.subFijos)+'*'); }
+  if(d.recargas.length){ L.push('*Recargas telefónicas*'); d.recargas.forEach(function(r){ L.push('- '+_fFecha(r.fecha)+' · '+(r.motivo||'Recarga')+' · '+money(r.monto)); }); L.push('Subtotal: *'+money(d.subRec)+'*'); }
+  if(d.inci.length){ L.push('*Incidencias y ajustes*'); d.inci.forEach(function(i){ L.push('- '+_fFecha(i.fecha)+' · '+(i.tipo||'')+' · '+(i.signo==='resta'?'−':'+')+money(i.monto)); }); L.push('Subtotal: *'+money(d.subInci)+'*'); }
   if(d.fondoC||d.fijos.length||d.recargas.length||d.inci.length) L.push('');
-  L.push('⏱️ Horas totales de la semana: '+fmtH(d.hOper+d.hCasa));
-  L.push('💰 *TOTAL A PAGAR: '+money(d.total)+'*');
+  L.push('Horas totales de la semana: '+fmtH(d.hOper+d.hCasa));
+  L.push('*TOTAL A PAGAR: '+money(d.total)+'*');
   return L.join('\n');
 }
 function _waAbrir(tel, texto, id){
@@ -2048,6 +2050,130 @@ function waEnviarTexto(id){
   var d=_cpDatos(id), tel=_waTelDe(d.cust); if(!tel) return;
   _waAbrir(tel, comprobanteTexto(d), id);
 }
+/* ---- Imagen del comprobante (formato vertical para leer en celular) ---- */
+var _h2cPromesa=null;
+function _cargarH2C(){
+  if(window.html2canvas) return Promise.resolve();
+  if(_h2cPromesa) return _h2cPromesa;
+  _h2cPromesa=new Promise(function(ok,fail){
+    var sc=document.createElement('script');
+    sc.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    sc.onload=function(){ ok(); }; sc.onerror=function(){ _h2cPromesa=null; fail(new Error('No se pudo cargar el generador de imagen (revisa tu internet)')); };
+    document.head.appendChild(sc);
+  });
+  return _h2cPromesa;
+}
+function comprobanteImagenHTML(d){
+  var c=d.cust||{}, F="font-family:'DM Sans',Arial,sans-serif;";
+  function sec(titulo,color,sub,cuerpo){
+    return '<div style="margin:14px 16px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff">'
+      +'<div style="background:'+color+';color:#fff;padding:9px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px"><span>'+titulo+'</span><span style="font-size:14px">'+sub+'</span></div>'
+      +cuerpo+'</div>';
+  }
+  function item(izq,der){ return '<div style="padding:10px 14px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:0">'+izq+'</div><div style="font-weight:800;font-size:16px;white-space:nowrap">'+der+'</div></div>'; }
+  function fila(k,v,col){ return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:14px;color:#334155"><span>'+k+'</span><b style="color:'+(col||'#0f172a')+'">'+v+'</b></div>'; }
+  var h='<div style="'+F+'width:600px;background:#f1f5f9;color:#0f172a;padding-bottom:16px">';
+  // Encabezado
+  h+='<div style="background:#0f172a;color:#fff;padding:18px 18px 16px">'
+    +'<div style="font-size:12px;letter-spacing:2px;color:#94a3b8;font-weight:700">COMPROBANTE DE PAGO</div>'
+    +'<div style="font-size:21px;font-weight:800;margin-top:4px">'+esc(c.nombre||'—')+'</div>'
+    +'<div style="font-size:13px;color:#cbd5e1;margin-top:3px">N° '+esc(c.numEmpleado||'—')+' · Base '+esc(c.base||'—')+'</div>'
+    +'<div style="font-size:14px;margin-top:8px;color:#fde68a;font-weight:700">'+esc(periodLabel())+'</div></div>';
+  // Resumen rápido
+  var nServ=d.operativos.length+d.casa.length;
+  h+='<div style="display:flex;gap:8px;margin:14px 16px 0">'
+    +[['Servicios',String(nServ)],['Horas totales',fmtH(d.hOper+d.hCasa)],['Total',money(d.total)]].map(function(x,i){
+      return '<div style="flex:1;background:'+(i===2?'#16a34a':'#fff')+';color:'+(i===2?'#fff':'#0f172a')+';border:1px solid '+(i===2?'#16a34a':'#e2e8f0')+';border-radius:10px;padding:9px 10px;text-align:center"><div style="font-size:11px;opacity:.8;font-weight:700">'+x[0].toUpperCase()+'</div><div style="font-size:18px;font-weight:800;margin-top:2px">'+x[1]+'</div></div>';
+    }).join('')+'</div>';
+  // Servicios operativos
+  if(d.operativos.length){
+    var cuerpo=d.operativos.map(function(s){
+      var k=calcularServicio(s), ti=tipoInfo(s.tipo), cli=_cpCliente(s), com=_cpComentario(s);
+      var izq='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="background:'+(ti.color||'#2563eb')+';color:#fff;border-radius:6px;padding:2px 8px;font-weight:800;font-size:13px">'+esc((ti.key||'')+(s.cons||''))+'</span><b style="font-size:14px">'+esc(cli||'')+'</b></div>'
+        +'<div style="font-size:13px;margin-top:5px;color:#334155">'+esc(s.origen||'—')+' → '+esc(s.destino||'—')+'</div>'
+        +'<div style="font-size:13px;margin-top:3px;color:#334155">Inicio <b>'+esc(_cpFH(s.fechaInicio||s.fecha,s.horaInicio))+'</b> · Fin <b>'+esc(_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin))+'</b></div>'
+        +'<div style="font-size:13px;margin-top:3px;color:#334155">Horas <b>'+(k.horasTotal!=null?fmtH(k.horasTotal):'—')+'</b>'+((k.horasTraslado||0)>0?' <span style="color:#64748b">('+fmtH(k.horasServicio||0)+' servicio + '+fmtH(k.horasTraslado)+' trayecto)</span>':'')+' · <span style="color:#64748b">'+esc(k.zonaAplicada)+'</span></div>'
+        +(com?'<div style="font-size:12px;margin-top:4px;color:#92400e;background:#fef3c7;border-radius:6px;padding:3px 7px;display:inline-block">'+esc(com)+'</div>':'');
+      return item(izq, money(k.importePorCustodio));
+    }).join('');
+    h+=sec('Gastos operativos de servicio','#2563eb',fmtH(d.hOper)+' · '+money(d.subOper),cuerpo);
+  }
+  // Casa Querétaro
+  if(d.casa.length){
+    var cuerpoC=d.casa.map(function(s){
+      var k=calcularServicio(s), uni=_cpUnidad(s), sup=_cpSupervisor(s), com=_cpComentario(s,true);
+      var izq='<div style="font-size:13px;color:#334155">Entrada <b>'+esc(_cpFH(s.fechaInicio||s.fecha,s.horaInicio))+'</b></div>'
+        +'<div style="font-size:13px;margin-top:3px;color:#334155">Salida <b>'+esc(_cpFH(s.fechaFin||s.fechaInicio||s.fecha,s.horaFin))+'</b></div>'
+        +'<div style="font-size:13px;margin-top:3px;color:#334155">Horas <b>'+(k.horasTotal!=null?fmtH(k.horasTotal):'—')+'</b>'+(uni?' · Unidad <b>'+esc(uni)+'</b>':'')+(sup?' · Sup. '+esc(sup):'')+'</div>'
+        +(com?'<div style="font-size:12px;margin-top:4px;color:#92400e;background:#fef3c7;border-radius:6px;padding:3px 7px;display:inline-block">'+esc(com)+'</div>':'');
+      return item(izq, money(k.importePorCustodio));
+    }).join('');
+    h+=sec('Casa de Descanso Querétaro','#7c3aed',fmtH(d.hCasa)+' · '+money(d.subCasa),cuerpoC);
+  }
+  // Otros conceptos
+  var otros='';
+  if(d.fondoC) otros+=item('<b style="font-size:14px">Fondo de viáticos</b><div style="font-size:12px;color:#64748b">Nuevo ingreso · semana '+d.fondoC.n+' de '+d.fondoC.de+'</div>', money(d.subFondo));
+  d.fijos.forEach(function(f){ otros+=item('<b style="font-size:14px">Servicio fijo</b><div style="font-size:12px;color:#64748b">'+esc(f.servicio||'—')+' · '+esc(clienteNombre(f.clienteId))+'</div>', money(f.importe)); });
+  d.recargas.forEach(function(r){ otros+=item('<b style="font-size:14px">Recarga telefónica</b><div style="font-size:12px;color:#64748b">'+esc(_fFecha(r.fecha))+' · '+esc(r.motivo||'Recarga')+'</div>', money(r.monto)); });
+  d.inci.forEach(function(i){ var neg=i.signo==='resta'; otros+=item('<b style="font-size:14px">'+(neg?'Descuento':'Ajuste')+'</b><div style="font-size:12px;color:#64748b">'+esc(_fFecha(i.fecha))+' · '+esc(i.tipo||'')+(i.obs?' · '+esc(i.obs):'')+'</div>', '<span style="color:'+(neg?'#dc2626':'#16a34a')+'">'+(neg?'−':'+')+money(i.monto)+'</span>'); });
+  if(otros) h+=sec('Otros conceptos','#0891b2',money(d.subFondo+d.subFijos+d.subRec+d.subInci),otros);
+  // Totales
+  h+='<div style="margin:14px 16px 0;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px">'
+    +fila('Gastos operativos',money(d.subOper))
+    +(d.casa.length?fila('Casa de Descanso',money(d.subCasa)):'')
+    +(d.subFondo?fila('Fondo de viáticos',money(d.subFondo)):'')
+    +(d.fijos.length?fila('Servicios fijos',money(d.subFijos)):'')
+    +(d.recargas.length?fila('Recargas telefónicas',money(d.subRec)):'')
+    +(d.inci.length?fila('Incidencias y ajustes',money(d.subInci),d.subInci<0?'#dc2626':''):'')
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px 14px;background:#16a34a;color:#fff;border-radius:10px"><span style="font-weight:800;font-size:16px">TOTAL A PAGAR</span><span style="font-weight:800;font-size:24px">'+money(d.total)+'</span></div></div>';
+  h+='<div style="text-align:center;font-size:11px;color:#94a3b8;margin-top:10px">Generado '+new Date().toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})+'</div>';
+  return h+'</div>';
+}
+function comprobanteImagenBlob(d){
+  return _cargarH2C().then(function(){
+    var cont=document.createElement('div');
+    cont.style.cssText='position:fixed;left:-10000px;top:0;z-index:-1';
+    cont.innerHTML=comprobanteImagenHTML(d);
+    document.body.appendChild(cont);
+    return window.html2canvas(cont.firstChild,{scale:2,backgroundColor:'#f1f5f9',logging:false,useCORS:true}).then(function(cv){
+      document.body.removeChild(cont);
+      return new Promise(function(ok){ cv.toBlob(function(b){ ok(b); },'image/png'); });
+    },function(e){ document.body.removeChild(cont); throw e; });
+  });
+}
+function _descargarBlob(blob,nombre){
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nombre; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },2000);
+}
+function waEnviarImagen(id){
+  var d=_cpDatos(id), tel=_waTelDe(d.cust); if(!tel) return;
+  var c=d.cust, box=document.querySelector('.cp-doc[data-id="'+id+'"] .wa-msg');
+  var nombreArch='Comprobante_'+(c.numEmpleado||'')+'_'+String(c.nombre||'').replace(/\s+/g,'_')+'_'+(periodVal()||'')+'.png';
+  if(box) box.innerHTML='<span class="muted">Generando imagen…</span>';
+  var blobP=comprobanteImagenBlob(d);
+  var texto='Hola '+(c.nombre||'')+', te comparto tu comprobante de pago de la '+String(periodLabel()).replace(/^Semana/i,'semana')+'. Total a pagar: *'+money(d.total)+'*';
+  var url='https://wa.me/52'+tel+'?text='+encodeURIComponent(texto);
+  var copiar = (navigator.clipboard && window.ClipboardItem)
+    ? navigator.clipboard.write([new ClipboardItem({'image/png':blobP})])
+    : Promise.reject(new Error('sin portapapeles'));
+  copiar.then(function(){
+    var w=window.open(url,'_blank');
+    if(box) box.innerHTML='<span style="color:var(--ok);font-weight:700">✓ Imagen copiada.</span> En el chat de WhatsApp presiona <b>Ctrl + V</b> y envía. '
+      +(w?'':'<a href="'+esc(url)+'" target="_blank"><b>Abrir chat de WhatsApp</b></a> · ')
+      +'<a href="#" onclick="waDescargarImagen(\''+id+'\');return false">Descargar imagen</a>';
+  }).catch(function(){
+    // Si no se pudo copiar, se descarga la imagen para adjuntarla
+    blobP.then(function(b){
+      _descargarBlob(b,nombreArch);
+      if(box) box.innerHTML='<span style="color:var(--warn,#b45309);font-weight:700">Se descargó la imagen</span> (no se pudo copiar al portapapeles). Adjúntala en el chat: <a href="'+esc(url)+'" target="_blank"><b>Abrir chat de WhatsApp</b></a>';
+    }).catch(function(e){ if(box) box.innerHTML='<span style="color:var(--danger)">No se pudo generar la imagen: '+esc(e.message||e)+'</span>'; });
+  });
+}
+function waDescargarImagen(id){
+  var d=_cpDatos(id), c=d.cust||{};
+  comprobanteImagenBlob(d).then(function(b){ _descargarBlob(b,'Comprobante_'+(c.numEmpleado||'')+'_'+String(c.nombre||'').replace(/\s+/g,'_')+'_'+(periodVal()||'')+'.png'); })
+    .catch(function(e){ toast('No se pudo generar la imagen: '+(e.message||e)); });
+}
 function waEnviarPDF(id){
   var d=_cpDatos(id), tel=_waTelDe(d.cust); if(!tel) return;
   var c=d.cust;
@@ -2060,7 +2186,7 @@ function waEnviarPDF(id){
   document.body.classList.remove('print-solo'); doc.classList.remove('print-this'); document.title=tituloAnt;
   var texto='Hola '+(c.nombre||'')+', te comparto tu *comprobante de pago* de la '+String(periodLabel()).replace(/^Semana/i,'semana')+'.\n'
     +'Servicios: '+d.operativos.length+(d.casa.length?(' · Casa Querétaro: '+d.casa.length):'')+' · Horas: '+fmtH(d.hOper+d.hCasa)+'\n'
-    +'💰 *Total a pagar: '+money(d.total)+'*\n(Adjunto el PDF con el desglose)';
+    +'*Total a pagar: '+money(d.total)+'*\n(Adjunto el PDF con el desglose)';
   _waAbrir(tel, texto, id);
   var box=doc.querySelector('.wa-msg'); if(box) box.innerHTML+=' <span class="muted">· Adjunta el PDF que acabas de guardar (clip 📎 → Documento).</span>';
 }
